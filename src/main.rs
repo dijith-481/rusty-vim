@@ -27,6 +27,13 @@ impl From<io::Error> for AppError {
 
 type Result<T> = std::result::Result<T, AppError>;
 
+struct EditorConfig {
+    orig_termios: Termios,
+    screen_rows: i32,
+    screen_cols: i32,
+    cx: i32,
+    cy: i32,
+}
     c & 0x1f
 }
 
@@ -57,8 +64,6 @@ fn editor_process_keypress() -> u8 {
         _ => c,
     }
 }
-fn editor_refresh_screen() {
-    write!(io::stdout(), "\x1b[2J").expect("write");
 fn get_cursor_pos() -> Result<(i32, i32)> {
     let mut response = String::new();
     write!(io::stdout(), "\x1b[6n")?;
@@ -80,24 +85,57 @@ fn get_cursor_pos() -> Result<(i32, i32)> {
     let cols = parts[1].parse::<i32>().unwrap_or(0);
     Ok((rows, cols))
 }
-fn main() -> io::Result<()> {
+
 fn get_window_size() -> Result<(i32, i32)> {
     write!(io::stdout(), "\x1b[999C\x1b[999B")?;
     stdout().flush().expect("err");
     get_cursor_pos()
 }
 
+}
+fn editor_refresh_screen(rows: i32) {
+    let mut abuf = String::new();
+    abuf.push_str("\x1b[?25l");
+    abuf.push_str("\x1b[H");
+    editor_draw_rows(rows, &mut abuf);
+    abuf.push_str("\x1b[H");
+    abuf.push_str("\x1b[?25h");
+    write!(io::stdout(), "{}", abuf);
+    stdout().flush().expect("flush");
+}
+
+fn init_editor() -> Result<EditorConfig> {
     let fd = io::stdin().as_raw_fd();
     let mut orig_termios = Termios::from_fd(fd)?;
-    tcgetattr(fd, &mut orig_termios).expect("tcgetattr");
+    tcgetattr(fd, &mut orig_termios)?;
     enable_raw_mode();
+    let (screen_rows, screen_cols) = get_window_size()?;
+    let e = EditorConfig {
+        orig_termios,
+        screen_rows,
+        screen_cols,
+        cx: 0,
+        cy: 0,
+    };
+    Ok(e)
+}
+fn main() -> Result<()> {
+    let e = init_editor()?;
     loop {
-        // editor_refresh_screen();
+        editor_refresh_screen(e.screen_rows);
         let exitcode = editor_process_keypress();
         if exitcode == b'0' {
+            write!(io::stdout(), "\x1b[2J").expect("write");
+            stdout().flush().expect("flush");
+            write!(io::stdout(), "\x1b[H").expect("write");
+            stdout().flush().expect("flush");
             break;
         }
     }
-    disable_raw_mode(&orig_termios);
+    disable_raw_mode(&e.orig_termios);
+    write!(io::stdout(), "\x1b[2J").expect("write");
+    stdout().flush().expect("flush");
+    write!(io::stdout(), "\x1b[H").expect("write");
+    stdout().flush().expect("flush");
     Ok(())
 }
