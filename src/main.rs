@@ -1,11 +1,10 @@
 use std::{
-    io::{self, Read, Write, stdin},
+    fmt,
+    io::{self, Read, Write, stdout},
     os::fd::AsRawFd,
-    process::exit,
 };
 use termios::*;
 
-const fn CTRL_KEY(c: u8) -> u8 {
 #[derive(Debug)]
 enum AppError {
     TermError,
@@ -34,6 +33,8 @@ struct EditorConfig {
     cx: i32,
     cy: i32,
 }
+
+const fn ctrl_key(c: u8) -> u8 {
     c & 0x1f
 }
 
@@ -60,7 +61,7 @@ fn editor_key_read() -> u8 {
 fn editor_process_keypress() -> u8 {
     let c = editor_key_read();
     match c {
-        c if c == CTRL_KEY(b'q') => b'0',
+        c if c == ctrl_key(b'q') => b'0',
         _ => c,
     }
 }
@@ -92,6 +93,17 @@ fn get_window_size() -> Result<(i32, i32)> {
     get_cursor_pos()
 }
 
+fn editor_draw_rows(rows: i32, abuf: &mut String) {
+    for y in 0..rows - 1 {
+        if y == rows / 3 {
+            abuf.push_str("Rust Text Editor ~ version:0.0.1\r\n");
+        } else {
+            abuf.push_str("~\r\n");
+        }
+        abuf.push_str("\x1b[K");
+    }
+    abuf.push_str("~");
+    abuf.push_str("\x1b[K");
 }
 fn editor_refresh_screen(rows: i32) {
     let mut abuf = String::new();
