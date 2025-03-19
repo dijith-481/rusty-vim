@@ -6,6 +6,27 @@ use std::{
 use termios::*;
 
 const fn CTRL_KEY(c: u8) -> u8 {
+#[derive(Debug)]
+enum AppError {
+    TermError,
+    Io(io::Error),
+}
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AppError::TermError => write!(f, "termerror"),
+            AppError::Io(e) => write!(f, "{}", e),
+        }
+    }
+}
+impl From<io::Error> for AppError {
+    fn from(err: io::Error) -> AppError {
+        AppError::Io(err)
+    }
+}
+
+type Result<T> = std::result::Result<T, AppError>;
+
     c & 0x1f
 }
 
