@@ -1,7 +1,12 @@
 use std::{
+    env::{self, Args},
     fmt,
-    io::{self, Read, Write, stdout},
+    fs::File,
+    io::{self, BufRead, BufReader, Lines, Read, Write, stdout},
+    option,
     os::fd::AsRawFd,
+    path::Path,
+    str::Utf8Chunk,
 };
 use termios::*;
 
@@ -32,6 +37,8 @@ struct EditorConfig {
     screen_cols: i32,
     cx: i32,
     cy: i32,
+    numrows: i32,
+    erow: Vec<String>,
 }
 
 const fn ctrl_key(c: u8) -> u8 {
@@ -53,18 +60,40 @@ fn enable_raw_mode() {
 
     tcsetattr(fd, TCSAFLUSH, &termios).expect("tcsetattr");
 }
+
 fn editor_key_read() -> u8 {
     let mut buffer = [0; 1];
-    while io::stdin().read(&mut buffer).expect("read") == 1 {}
+    io::stdin().read(&mut buffer).expect("read");
+    if buffer[0] == b'\x1b' {
+        let mut seq = [0; 3];
+        io::stdin().read(&mut seq).expect("read");
+        if seq[0] == b'[' {
+            match seq[1] as char {
+                'A' => return b'k',
+                'B' => return b'j',
+                'C' => return b'l',
+                'D' => return b'h',
+                _ => return b'0',
+            }
+        }
+        return b'\x1b';
+    }
     buffer[0]
 }
-fn editor_process_keypress() -> u8 {
+
+fn editor_process_keypress(e: &mut EditorConfig) -> Option<u8> {
     let c = editor_key_read();
+    // println!("{}", c as char);
     match c {
-        c if c == ctrl_key(b'q') => b'0',
-        _ => c,
+        c if c == ctrl_key(b'q') => Some(b'0'),
+        c if c == b'h' || c == b'j' || c == b'k' || c == b'l' => {
+            editor_move_cursor(c as char, e);
+            Some(c)
+        }
+        _ => Some(c),
     }
 }
+
 fn get_cursor_pos() -> Result<(i32, i32)> {
     let mut response = String::new();
     write!(io::stdout(), "\x1b[6n")?;
@@ -93,24 +122,57 @@ fn get_window_size() -> Result<(i32, i32)> {
     get_cursor_pos()
 }
 
-fn editor_draw_rows(rows: i32, abuf: &mut String) {
-    for y in 0..rows - 1 {
-        if y == rows / 3 {
-            abuf.push_str("Rust Text Editor ~ version:0.0.1\r\n");
+fn editor_draw_rows(e: &EditorConfig, abuf: &mut String) {
+    for y in 0..e.screen_rows - 1 {
+        if y < e.numrows {
+            if let Some(line) = e.erow.get(y as usize) {
+                abuf.push_str(line);
+                abuf.push_str("\r\n");
+            }
         } else {
-            abuf.push_str("~\r\n");
+            if y == e.screen_rows / 3 {
+                abuf.push_str("Rust Text Editor ~ version:0.0.1\r\n");
+            } else {
+                abuf.push_str("~\r\n");
+            }
         }
         abuf.push_str("\x1b[K");
     }
     abuf.push_str("~");
     abuf.push_str("\x1b[K");
 }
-fn editor_refresh_screen(rows: i32) {
+fn editor_move_cursor(a: char, e: &mut EditorConfig) {
+    match a {
+        'h' => {
+            if e.cx > 0 {
+                e.cx -= 1;
+            }
+        }
+        'l' => {
+            if e.cx < e.screen_cols {
+                e.cx += 1;
+            }
+        }
+        'k' => {
+            if e.cy > 0 {
+                e.cy -= 1;
+            }
+        }
+        'j' => {
+            if e.cy < e.screen_rows - 1 {
+                e.cy += 1;
+            }
+        }
+        _ => println!(""),
+    }
+}
+
+fn editor_refresh_screen(e: &EditorConfig) {
     let mut abuf = String::new();
     abuf.push_str("\x1b[?25l");
     abuf.push_str("\x1b[H");
-    editor_draw_rows(rows, &mut abuf);
-    abuf.push_str("\x1b[H");
+    editor_draw_rows(e, &mut abuf);
+    abuf.push_str(&format!("\x1b[{};{}H", e.cy + 1, e.cx + 1));
     abuf.push_str("\x1b[?25h");
     write!(io::stdout(), "{}", abuf);
     stdout().flush().expect("flush");
@@ -126,22 +188,47 @@ fn init_editor() -> Result<EditorConfig> {
         orig_termios,
         screen_rows,
         screen_cols,
-        cx: 0,
-        cy: 0,
+        cx: 4,
+        cy: 5,
+        numrows: 0,
+        erow: Vec::new(),
     };
     Ok(e)
 }
+
+fn read_lines<P>(filename: P) -> Result<Lines<BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(BufReader::new(file).lines())
+}
+
+fn editor_open(e: &mut EditorConfig, filename: &String) {
+    if let Ok(lines) = read_lines(filename) {
+        for line in lines {
+            e.erow.push(line.expect("line"));
+            e.numrows += 1;
+        }
+    }
+}
+
 fn main() -> Result<()> {
-    let e = init_editor()?;
+    let args: Vec<String> = env::args().collect();
+    let mut e = init_editor()?;
+    editor_open(&mut e, &args[1]);
     loop {
-        editor_refresh_screen(e.screen_rows);
-        let exitcode = editor_process_keypress();
-        if exitcode == b'0' {
-            write!(io::stdout(), "\x1b[2J").expect("write");
+        editor_refresh_screen(&e);
+        let exitcode = editor_process_keypress(&mut e);
+        if let Some(code) = exitcode {
             stdout().flush().expect("flush");
-            write!(io::stdout(), "\x1b[H").expect("write");
-            stdout().flush().expect("flush");
-            break;
+            if code == b'0' {
+                write!(io::stdout(), "\x1b[2J").expect("write");
+                stdout().flush().expect("flush");
+                write!(io::stdout(), "\x1b[H").expect("write");
+                stdout().flush().expect("flush");
+                break;
+            }
         }
     }
     disable_raw_mode(&e.orig_termios);
