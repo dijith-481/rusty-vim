@@ -35,10 +35,13 @@ struct EditorConfig {
     orig_termios: Termios,
     screen_rows: i32,
     screen_cols: i32,
-    cx: i32,
-    cy: i32,
+    camera_x: i32,
+    camera_y: i32,
+    cursor_x: i32,
+    cursor_y: i32,
     numrows: i32,
     erow: Vec<String>,
+    current_line: i32,
 }
 
 const fn ctrl_key(c: u8) -> u8 {
@@ -86,7 +89,7 @@ fn editor_process_keypress(e: &mut EditorConfig) -> Option<u8> {
     // println!("{}", c as char);
     match c {
         c if c == ctrl_key(b'q') => Some(b'0'),
-        c if c == b'h' || c == b'j' || c == b'k' || c == b'l' => {
+        c if c == b'h' || c == b'j' || c == b'k' || c == b'l' || c == b'$' => {
             editor_move_cursor(c as char, e);
             Some(c)
         }
@@ -123,44 +126,70 @@ fn get_window_size() -> Result<(i32, i32)> {
 }
 
 fn editor_draw_rows(e: &EditorConfig, abuf: &mut String) {
-    for y in 0..e.screen_rows - 1 {
+    let camera_y_end = e.camera_y + e.screen_rows;
+    for y in e.camera_y..camera_y_end {
+        abuf.push_str("\x1b[K");
         if y < e.numrows {
             if let Some(line) = e.erow.get(y as usize) {
                 abuf.push_str(line);
-                abuf.push_str("\r\n");
+                if y < camera_y_end - 1 {
+                    abuf.push_str("\r\n");
+                } else {
+                    abuf.push_str("\r");
+                }
             }
         } else {
-            if y == e.screen_rows / 3 {
-                abuf.push_str("Rust Text Editor ~ version:0.0.1\r\n");
-            } else {
-                abuf.push_str("~\r\n");
-            }
+            abuf.push_str("~\r\n");
         }
-        abuf.push_str("\x1b[K");
     }
-    abuf.push_str("~");
-    abuf.push_str("\x1b[K");
 }
 fn editor_move_cursor(a: char, e: &mut EditorConfig) {
     match a {
         'h' => {
-            if e.cx > 0 {
-                e.cx -= 1;
+            if e.cursor_x > 0 {
+                e.cursor_x -= 1;
             }
         }
+        '$' => {
+            e.cursor_x = e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1;
+        }
         'l' => {
-            if e.cx < e.screen_cols {
-                e.cx += 1;
+            if e.cursor_x < e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1 {
+                e.cursor_x += 1;
             }
         }
         'k' => {
-            if e.cy > 0 {
-                e.cy -= 1;
+            if e.cursor_y > 0 {
+                if e.cursor_x != 0
+                    && e.cursor_x == e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1
+                {
+                    e.cursor_x = e.erow[(e.camera_y + e.cursor_y - 1) as usize].len() as i32 - 1;
+                }
+                e.cursor_y -= 1;
+                if e.cursor_x != 0
+                    && e.cursor_x > e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1
+                {
+                    e.cursor_x = e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1;
+                }
+            } else if e.camera_y > 0 {
+                e.camera_y -= 1;
             }
         }
         'j' => {
-            if e.cy < e.screen_rows - 1 {
-                e.cy += 1;
+            if e.cursor_y < e.screen_rows - 1 {
+                if e.cursor_x != 0
+                    && e.cursor_x == e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1
+                {
+                    e.cursor_x = e.erow[(e.camera_y + e.cursor_y + 1) as usize].len() as i32 - 1;
+                }
+                e.cursor_y += 1;
+                if e.cursor_x != 0
+                    && e.cursor_x > e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1
+                {
+                    e.cursor_x = e.erow[(e.camera_y + e.cursor_y) as usize].len() as i32 - 1;
+                }
+            } else if e.camera_y < e.numrows - e.screen_rows + 1 {
+                e.camera_y += 1;
             }
         }
         _ => println!(""),
@@ -172,7 +201,7 @@ fn editor_refresh_screen(e: &EditorConfig) {
     abuf.push_str("\x1b[?25l");
     abuf.push_str("\x1b[H");
     editor_draw_rows(e, &mut abuf);
-    abuf.push_str(&format!("\x1b[{};{}H", e.cy + 1, e.cx + 1));
+    abuf.push_str(&format!("\x1b[{};{}H", e.cursor_y + 1, e.cursor_x + 1));
     abuf.push_str("\x1b[?25h");
     write!(io::stdout(), "{}", abuf);
     stdout().flush().expect("flush");
@@ -188,9 +217,12 @@ fn init_editor() -> Result<EditorConfig> {
         orig_termios,
         screen_rows,
         screen_cols,
-        cx: 4,
-        cy: 5,
+        camera_y: 0,
+        camera_x: 0,
+        cursor_x: 0,
+        cursor_y: 0,
         numrows: 0,
+        current_line: 0,
         erow: Vec::new(),
     };
     Ok(e)
