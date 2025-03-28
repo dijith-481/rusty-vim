@@ -11,9 +11,9 @@ use std::{
     io::{self, Write, stdout},
 };
 
-const fn ctrl_key(c: u8) -> u8 {
-    c & 0x1f
-}
+// const fn ctrl_key(c: u8) -> u8 {
+//     c & 0x1f
+// }
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -22,16 +22,14 @@ fn main() -> Result<()> {
     let mut e = Editor::new(buffer)?;
     loop {
         e.refresh_screen();
-        let exitcode = e.process_keypress();
-        if let Some(code) = exitcode {
+        e.process_keypress();
+        // stdout().flush().expect("flush");
+        if e.exit_flag {
+            // write!(io::stdout(), "\x1b[2J").expect("write");
             // stdout().flush().expect("flush");
-            if code == b'|' && e.mode == 0 {
-                // write!(io::stdout(), "\x1b[2J").expect("write");
-                // stdout().flush().expect("flush");
-                // write!(io::stdout(), "\x1b[H").expect("write");
-                // stdout().flush().expect("flush");
-                break;
-            }
+            // write!(io::stdout(), "\x1b[H").expect("write");
+            // stdout().flush().expect("flush");
+            break;
         }
     }
     write!(io::stdout(), "\x1b[2J").expect("write");
