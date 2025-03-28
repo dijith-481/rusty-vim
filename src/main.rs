@@ -15,10 +15,6 @@ const fn ctrl_key(c: u8) -> u8 {
     c & 0x1f
 }
 
-// fn insert_text(e: &EditorConfig, c: char) {
-//     e.erow[(e.camera_y + e.cursor_y) as usize] - 1;
-// }
-
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let mut buffer = TextBuffer::new();
@@ -28,12 +24,12 @@ fn main() -> Result<()> {
         e.refresh_screen();
         let exitcode = e.process_keypress();
         if let Some(code) = exitcode {
-            stdout().flush().expect("flush");
-            if code == b'0' {
-                write!(io::stdout(), "\x1b[2J").expect("write");
-                stdout().flush().expect("flush");
-                write!(io::stdout(), "\x1b[H").expect("write");
-                stdout().flush().expect("flush");
+            // stdout().flush().expect("flush");
+            if code == b'0' && e.mode == 0 {
+                // write!(io::stdout(), "\x1b[2J").expect("write");
+                // stdout().flush().expect("flush");
+                // write!(io::stdout(), "\x1b[H").expect("write");
+                // stdout().flush().expect("flush");
                 break;
             }
         }

@@ -11,6 +11,7 @@ pub struct Editor {
     cursor_x: i32,
     cursor_y: i32,
     buffer: TextBuffer,
+    pub mode: i32,
 }
 impl Editor {
     pub fn new(buffer: TextBuffer) -> Result<Self> {
@@ -25,6 +26,7 @@ impl Editor {
             cursor_x: 0,
             cursor_y: 0,
             buffer,
+            mode: 0,
         })
     }
     fn get_window_size() -> Result<(i32, i32)> {
@@ -33,7 +35,7 @@ impl Editor {
         Self::get_cursor_pos()
     }
     fn editor_draw_rows(&self, abuf: &mut String) {
-        let camera_y_end = self.camera_y + self.screen_rows;
+        let camera_y_end = self.camera_y + self.screen_rows - 2;
         for y in self.camera_y..camera_y_end {
             abuf.push_str("\x1b[K");
             if y < self.buffer.row_count as i32 {
@@ -50,11 +52,26 @@ impl Editor {
             }
         }
     }
+    fn insert_text(&mut self, c: char) {
+        if !((c as u8) < 32) {
+            self.buffer
+                .rows
+                .get_mut((self.camera_y + self.cursor_y) as usize)
+                .unwrap()
+                .insert((self.camera_x + self.cursor_x) as usize, c);
+            self.cursor_x += 1;
+        }
+    }
+
     pub(crate) fn refresh_screen(&mut self) {
         let mut abuf = String::new();
         abuf.push_str("\x1b[?25l");
         abuf.push_str("\x1b[H");
         self.editor_draw_rows(&mut abuf);
+        abuf.push_str(&format!(
+            "{},{},{},{}",
+            self.camera_x, self.cursor_x, self.camera_y, self.cursor_y
+        ));
         abuf.push_str(&format!(
             "\x1b[{};{}H",
             self.cursor_y + 1,
@@ -114,7 +131,7 @@ impl Editor {
             }
             '$' => {
                 self.cursor_x =
-                    self.buffer.rows[(self.camera_y + self.cursor_y) as usize].len() as i32 - 1;
+                    self.buffer.rows[(self.camera_y + self.cursor_y + 1) as usize].len() as i32 - 1;
             }
             'l' => {
                 if self.cursor_x
@@ -182,16 +199,32 @@ impl Editor {
             _ => println!(""),
         }
     }
+
+    fn process_normal_mode(&mut self, c: char) {
+        match c {
+            c if c == 'h' || c == 'j' || c == 'k' || c == 'l' || c == '$' => {
+                self.move_cursor(c as char);
+            }
+            c if c == 'i' => self.mode = 1,
+
+            _ => eprintln!("error"),
+        }
+    }
+    fn process_insert_mode(&mut self, c: char) {
+        if c == 'p' {
+            self.mode = 0;
+            return;
+        }
+        self.insert_text(c);
+    }
     pub(crate) fn process_keypress(&mut self) -> Option<u8> {
         let c = self.read_key();
-        match c {
-            c if c == b'q' => Some(b'0'),
-            c if c == b'h' || c == b'j' || c == b'k' || c == b'l' || c == b'$' => {
-                self.move_cursor(c as char);
-                Some(c)
-            }
-            _ => Some(c),
+        match self.mode {
+            0 => self.process_normal_mode(c as char),
+            1 => self.process_insert_mode(c as char),
+            _ => eprintln!("error"),
         }
+        Some(c)
     }
 }
 impl Drop for Editor {
