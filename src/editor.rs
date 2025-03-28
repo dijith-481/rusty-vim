@@ -2,6 +2,35 @@ use crate::buffer::TextBuffer;
 use crate::error::{AppError, Result};
 use crate::terminal::Terminal;
 use std::io::{self, Read, Write, stdout};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditorModes {
+    Normal,
+    Insert,
+    Command,
+    Visual,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Left,
+    Right,
+    Up,
+    Down,
+    EndOfLine,
+    StartOfLine,
+    StartOfNonWhiteSpace,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NormalAction {
+    Move(Direction),
+    ChangeMode(EditorModes),
+    Unknown,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CammandModeAction {
+    ChangeMode(EditorModes),
+}
+
 pub struct Editor {
     terminal: Terminal,
     screen_rows: i32,
@@ -13,6 +42,7 @@ pub struct Editor {
     buffer: TextBuffer,
     pub mode: i32,
 }
+
 impl Editor {
     pub fn new(buffer: TextBuffer) -> Result<Self> {
         let terminal = Terminal::new()?;
@@ -52,13 +82,13 @@ impl Editor {
             }
         }
     }
-    fn insert_text(&mut self, c: char) {
-        if !((c as u8) < 32) {
+    fn insert_text(&mut self, c: u8) {
+        if !((c) < 32) {
             self.buffer
                 .rows
                 .get_mut((self.camera_y + self.cursor_y) as usize)
                 .unwrap()
-                .insert((self.camera_x + self.cursor_x) as usize, c);
+                .insert((self.camera_x + self.cursor_x) as usize, c as char);
             self.cursor_x += 1;
         }
     }
@@ -115,32 +145,41 @@ impl Editor {
                     'B' => return b'j',
                     'C' => return b'l',
                     'D' => return b'h',
-                    _ => return b'0',
+                    _ => (),
                 }
             }
             return b'\x1b';
         }
         buffer[0]
     }
-    fn move_cursor(&mut self, a: char) {
-        match a {
-            'h' => {
+    fn move_cursor(&mut self, direction: Direction) {
+        match direction {
+            Direction::Left => {
                 if self.cursor_x > 0 {
                     self.cursor_x -= 1;
                 }
             }
-            '$' => {
-                self.cursor_x =
-                    self.buffer.rows[(self.camera_y + self.cursor_y + 1) as usize].len() as i32 - 1;
+            Direction::StartOfLine => {
+                self.cursor_x = 0;
             }
-            'l' => {
+            Direction::StartOfNonWhiteSpace => {
+                self.cursor_x = self.buffer.rows[(self.camera_y + self.cursor_y) as usize]
+                    .chars()
+                    .position(|c| c != ' ')
+                    .unwrap() as i32;
+            }
+            Direction::EndOfLine => {
+                self.cursor_x =
+                    self.buffer.rows[(self.camera_y + self.cursor_y) as usize].len() as i32 - 1;
+            }
+            Direction::Right => {
                 if self.cursor_x
                     < self.buffer.rows[(self.camera_y + self.cursor_y) as usize].len() as i32 - 1
                 {
                     self.cursor_x += 1;
                 }
             }
-            'k' => {
+            Direction::Up => {
                 if self.cursor_y > 0 {
                     if self.cursor_x != 0
                         && self.cursor_x
@@ -168,7 +207,7 @@ impl Editor {
                     self.camera_y -= 1;
                 }
             }
-            'j' => {
+            Direction::Down => {
                 if self.cursor_y < self.screen_rows - 1 {
                     if self.cursor_x != 0
                         && self.cursor_x
@@ -196,22 +235,31 @@ impl Editor {
                     self.camera_y += 1;
                 }
             }
-            _ => println!(""),
         }
     }
 
-    fn process_normal_mode(&mut self, c: char) {
+    fn map_key_to_action_normal_mode(&self, c: u8) -> NormalAction {
         match c {
-            c if c == 'h' || c == 'j' || c == 'k' || c == 'l' || c == '$' => {
-                self.move_cursor(c as char);
-            }
-            c if c == 'i' => self.mode = 1,
-
-            _ => eprintln!("error"),
+            b'h' => NormalAction::Move(Direction::Left),
+            b'j' => NormalAction::Move(Direction::Down),
+            b'k' => NormalAction::Move(Direction::Up),
+            b'l' => NormalAction::Move(Direction::Right),
+            b'$' => NormalAction::Move(Direction::EndOfLine),
+            b'0' => NormalAction::Move(Direction::StartOfLine),
+            b'^' => NormalAction::Move(Direction::StartOfNonWhiteSpace),
+            _ => NormalAction::Unknown,
         }
     }
-    fn process_insert_mode(&mut self, c: char) {
-        if c == 'p' {
+
+    fn process_normal_mode(&mut self, c: u8) {
+        let action = self.map_key_to_action_normal_mode(c);
+        match action {
+            NormalAction::Move(direction) => self.move_cursor(direction),
+            _ => (),
+        }
+    }
+    fn process_insert_mode(&mut self, c: u8) {
+        if c == b'\x1b' {
             self.mode = 0;
             return;
         }
@@ -220,8 +268,8 @@ impl Editor {
     pub(crate) fn process_keypress(&mut self) -> Option<u8> {
         let c = self.read_key();
         match self.mode {
-            0 => self.process_normal_mode(c as char),
-            1 => self.process_insert_mode(c as char),
+            0 => self.process_normal_mode(c),
+            1 => self.process_insert_mode(c),
             _ => eprintln!("error"),
         }
         Some(c)

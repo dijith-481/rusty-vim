@@ -25,7 +25,7 @@ fn main() -> Result<()> {
         let exitcode = e.process_keypress();
         if let Some(code) = exitcode {
             // stdout().flush().expect("flush");
-            if code == b'0' && e.mode == 0 {
+            if code == b'|' && e.mode == 0 {
                 // write!(io::stdout(), "\x1b[2J").expect("write");
                 // stdout().flush().expect("flush");
                 // write!(io::stdout(), "\x1b[H").expect("write");
