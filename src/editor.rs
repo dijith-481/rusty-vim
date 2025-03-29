@@ -1,7 +1,7 @@
 use crate::buffer::{self, TextBuffer};
 use crate::error::{AppError, Result};
 use crate::terminal::{Size, Terminal};
-use std::cmp;
+use std::cmp::{self, max};
 use std::io::{self, Read, Write, stdout};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +27,7 @@ enum NormalAction {
     Move(Direction),
     ChangeMode(EditorModes),
     NewLine(Direction),
+    Delete(Direction),
     Unknown,
 }
 
@@ -66,15 +67,31 @@ impl Editor {
     }
 
     fn insert_text(&mut self, c: u8) {
-        if !((c) < 32) {
-            self.buffer
-                .rows
-                .get_mut((self.pos.y) as usize)
-                .unwrap()
-                .insert((self.pos.x) as usize, c as char);
-            self.pos.x += 1;
+        self.buffer
+            .rows
+            .get_mut((self.pos.y) as usize)
+            .unwrap()
+            .insert((self.pos.x) as usize, c as char);
+        self.pos.x += 1;
+    }
+    fn delete_text(&mut self, direction: Direction) {
+        match direction {
+            Direction::Left => {
+                if self.buffer.rows[self.pos.y as usize].len() == 0 {
+                    return;
+                }
+                if self.pos.x >= self.buffer.rows[self.pos.y as usize].len() as i32 - 1 {
+                    self.pos.x = self.buffer.rows[self.pos.y as usize].len() as i32 - 1;
+                }
+                self.buffer.rows[self.pos.y as usize].remove(self.pos.x as usize);
+            }
+            Direction::Down => {
+                self.buffer.rows[self.pos.y as usize].remove(self.pos.x as usize);
+            }
+            _ => (),
         }
     }
+
     fn insert_newline(&mut self, direction: Direction) {
         match direction {
             Direction::Up => {
@@ -211,6 +228,9 @@ impl Editor {
                 self.normal_action(NormalAction::NewLine(Direction::Up));
                 self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
             }
+            b'x' => {
+                self.normal_action(NormalAction::Delete(Direction::Left));
+            }
             _ => self.normal_action(NormalAction::Unknown),
         }
         // self.status_line_right = String::new();
@@ -220,6 +240,7 @@ impl Editor {
             NormalAction::Move(direction) => self.move_cursor(direction),
             NormalAction::ChangeMode(editormode) => self.mode = editormode,
             NormalAction::NewLine(direction) => self.insert_newline(direction),
+            NormalAction::Delete(direction) => self.delete_text(direction),
             _ => (),
         }
     }
@@ -228,8 +249,21 @@ impl Editor {
         if c == b'\x1b' {
             self.mode = EditorModes::Normal;
             return;
+        } else if c == 127 {
+            if self.pos.x == 0 && self.pos.y > 0 {
+                let content = self.buffer.rows.remove(self.pos.y as usize);
+                self.buffer.rows[self.pos.y as usize - 1].push_str(&content);
+                self.pos.y -= 1;
+                self.pos.x = self.buffer.rows[self.pos.y as usize].len() as i32 - 1;
+            } else {
+                self.normal_action(NormalAction::Delete(Direction::Left));
+                self.pos.x -= 1;
+            }
+        } else if c == 13 {
+            self.normal_action(NormalAction::NewLine(Direction::Down));
+        } else if !((c) < 32) {
+            self.insert_text(c);
         }
-        self.insert_text(c);
     }
     fn process_command_mode(&mut self, c: u8) {
         if c == b'\x1b' {

@@ -20,3 +20,4 @@ fn main() -> Result<()> {
     Editor::new().run();
     Ok(())
 }
+
