@@ -1,5 +1,6 @@
 use crate::{
-    TextBuffer, buffer,
+    TextBuffer,
+    editor::EditorModes,
     error::{AppError, Result},
 };
 
@@ -10,8 +11,8 @@ use std::{
 use termios::*;
 
 pub struct Size {
-    pub x: i32,
-    pub y: i32,
+    pub x: usize,
+    pub y: usize,
 }
 pub struct Terminal {
     termios: Termios,
@@ -20,6 +21,11 @@ pub struct Terminal {
     pub cursor: Size,
     pub status_line_left: String,
     pub status_line_right: String,
+    cursor_type: CursorType,
+}
+enum CursorType {
+    Ibeam,
+    Block,
 }
 
 impl Terminal {
@@ -32,6 +38,7 @@ impl Terminal {
             cursor: Size { x: 0, y: 0 },
             status_line_right: String::new(),
             status_line_left: String::new(),
+            cursor_type: CursorType::Block,
         };
 
         Self::enable_raw_mode(fd)?;
@@ -76,15 +83,15 @@ impl Terminal {
             return Err(AppError::TermError);
         }
         let parts: Vec<&str> = response[2..].split(';').collect();
-        let rows = parts[0].parse::<i32>().unwrap_or(0);
-        let cols = parts[1].parse::<i32>().unwrap_or(0);
+        let rows = parts[0].parse::<usize>().unwrap_or(0);
+        let cols = parts[1].parse::<usize>().unwrap_or(0);
         Ok(Size { x: cols, y: rows })
     }
     fn editor_draw_rows(&self, buffer: &TextBuffer, abuf: &mut String) {
         let camera_y_end = self.camera.y + self.size.y - 1;
         for y in self.camera.y..camera_y_end {
             abuf.push_str("\x1b[K"); //clears from current position to end of line
-            if y < buffer.rows.len() as i32 {
+            if y < buffer.rows.len() {
                 if let Some(line) = buffer.rows.get(y as usize) {
                     abuf.push_str(line);
                     abuf.push_str("\r\n");
@@ -98,19 +105,21 @@ impl Terminal {
         abuf.push_str(&format!(
             "\x1b[{};{}H",
             self.size.y,
-            self.size.x - self.status_line_right.len() as i32
+            self.size.x - self.status_line_right.len()
         ));
         abuf.push_str(&self.status_line_right);
         abuf.push_str("\r");
     }
-    pub fn refresh_screen(&mut self, pos: &Size, buffer: &TextBuffer) {
+    pub fn refresh_screen(&mut self, buffer: &TextBuffer, pos: &Size) {
         self.cursor.x = pos.x % self.size.x;
         self.cursor.y = pos.y % self.size.y;
         self.camera.x = pos.x / self.size.x;
         self.camera.y = pos.y / self.size.y;
         let mut abuf = String::new();
+        let cursor_type = self.get_cursor_code();
         abuf.push_str("\x1b[?25l"); //hide cursor
         abuf.push_str("\x1b[H"); //cursor upperleft 
+        abuf.push_str(&format!("{}", cursor_type)); //cursor upperleft 
         self.editor_draw_rows(buffer, &mut abuf);
         // abuf.push_str(&format!(
         //     "{},{},{},{},{},{}",
@@ -129,6 +138,39 @@ impl Terminal {
         abuf.push_str("\x1b[?25h");
         write!(io::stdout(), "{}", abuf);
         stdout().flush().expect("flush");
+    }
+    pub fn read_key(&self) -> u8 {
+        let mut buffer = [0; 1];
+        io::stdin().read(&mut buffer).expect("read");
+        if buffer[0] == b'\x1b' {
+            let mut seq = [0; 3];
+            io::stdin().read(&mut seq).expect("read");
+            if seq[0] == b'[' {
+                match seq[1] as char {
+                    'A' => return b'k',
+                    'B' => return b'j',
+                    'C' => return b'l',
+                    'D' => return b'h',
+                    _ => (),
+                }
+            }
+            return b'\x1b';
+        }
+        buffer[0]
+    }
+    fn get_cursor_code(&self) -> &str {
+        match self.cursor_type {
+            CursorType::Block => "\x1b[2 q",
+            CursorType::Ibeam => "\x1b[6 q",
+        }
+    }
+    pub fn change_cursor(&mut self, mode: EditorModes) {
+        match mode {
+            EditorModes::Insert => {
+                self.cursor_type = CursorType::Ibeam;
+            }
+            _ => self.cursor_type = CursorType::Block,
+        }
     }
 }
 impl Drop for Terminal {

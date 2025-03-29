@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::{editor::Direction, error::Result, terminal::Size};
 use std::{
     env::{self},
     fs::File,
@@ -34,7 +34,7 @@ impl TextBuffer {
             }
         }
     }
-    pub fn write_file_to_disk(&self) {
+    pub fn write_buffer_to_disk(&self) {
         let long_string = self.rows.join("\n");
         if !self.filename.is_empty() {
             let mut file = File::create(&self.filename).expect("error saving file");
@@ -48,5 +48,55 @@ impl TextBuffer {
     {
         let file = File::open(filename)?;
         Ok(io::BufReader::new(file).lines())
+    }
+
+    pub fn insert_char(&mut self, c: u8, pos: &mut Size) {
+        self.rows.get_mut(pos.y).unwrap().insert(pos.x, c as char);
+        pos.x += 1;
+    }
+    pub fn insert_str(&mut self, str: &str, pos: &mut Size) {
+        let row = self.rows.get_mut(pos.y).unwrap();
+        row.insert_str(pos.x, str);
+        pos.x += str.len();
+    }
+    pub fn append_char(&mut self, c: u8, pos: &mut Size) {
+        let row = self.rows.get_mut(pos.y).unwrap();
+        row.push(c as char);
+        pos.x = row.len() - 1;
+    }
+    pub fn append_str(&mut self, str: &str, pos: &mut Size) {
+        let row = self.rows.get_mut(pos.y).unwrap();
+        row.push_str(str);
+        pos.x = str.len() - 1;
+    }
+    pub fn delete_char(&mut self, pos: &mut Size) {
+        let row = self.rows.get_mut(pos.y).unwrap();
+        if row.len() == 0 {
+            return;
+        }
+        if !pos.x == 0 {
+            row.remove(pos.x);
+            return;
+        }
+        if pos.y > 0 {
+            let text = self.rows.remove(pos.y);
+            self.rows[pos.y - 1].push_str(&text);
+        }
+    }
+    pub fn delete_row(&mut self, pos: &mut Size) {
+        if self.rows.len() == 0 {
+            return;
+        };
+        self.rows.remove(pos.y);
+    }
+
+    pub fn pop_char(&mut self, pos: &mut Size) {
+        let row = self.rows.get_mut(pos.y).unwrap();
+        row.pop();
+    }
+
+    pub fn insert_newline(&mut self, pos: &mut Size) {
+        self.rows.insert(pos.y, String::new());
+        pos.x = 0;
     }
 }

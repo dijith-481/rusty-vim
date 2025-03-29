@@ -12,12 +12,7 @@ use std::{
     string,
 };
 
-// const fn ctrl_key(c: u8) -> u8 {
-//     c & 0x1f
-// }
-
 fn main() -> Result<()> {
     Editor::new().run();
     Ok(())
 }
-
