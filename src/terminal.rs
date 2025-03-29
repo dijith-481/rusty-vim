@@ -118,8 +118,8 @@ impl Terminal {
         let mut abuf = String::new();
         let cursor_type = self.get_cursor_code();
         abuf.push_str("\x1b[?25l"); //hide cursor
-        abuf.push_str("\x1b[H"); //cursor upperleft 
-        abuf.push_str(&format!("{}", cursor_type)); //cursor upperleft 
+        abuf.push_str("\x1b[H"); //cursor upperleft
+        abuf.push_str(&format!("{}", cursor_type)); //cursor upperleft
         self.editor_draw_rows(buffer, &mut abuf);
         // abuf.push_str(&format!(
         //     "{},{},{},{},{},{}",

@@ -74,14 +74,24 @@ impl TextBuffer {
         if row.len() == 0 {
             return;
         }
-        if !pos.x == 0 {
-            row.remove(pos.x);
+        if row.len() == 1 {
+            row.remove(0);
+            row.push(' ');
             return;
         }
-        if pos.y > 0 {
+        row.remove(pos.x);
+        if pos.x >= row.len() {
+            pos.x = row.len() - 1;
+        }
+    }
+    pub fn back_space(&mut self, pos: &mut Size) {
+        if pos.x == 0 && pos.y > 0 {
             let text = self.rows.remove(pos.y);
             self.rows[pos.y - 1].push_str(&text);
+            return;
         }
+        pos.x -= 1;
+        self.delete_char(pos);
     }
     pub fn delete_row(&mut self, pos: &mut Size) {
         if self.rows.len() == 0 {
