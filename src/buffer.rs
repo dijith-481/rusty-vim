@@ -1,28 +1,45 @@
 use crate::error::Result;
 use std::{
+    env::{self},
     fs::File,
-    io::{self, BufRead, BufReader, Lines},
+    io::{self, BufRead, BufReader, Lines, Write},
     path::Path,
 };
 pub(crate) struct TextBuffer {
+    pub filename: String,
     pub rows: Vec<String>,
-    pub row_count: usize,
 }
 
 impl TextBuffer {
     pub(crate) fn new() -> Self {
-        Self {
+        let args: Vec<String> = env::args().collect();
+        let mut buffer = Self {
+            filename: String::new(),
             rows: Vec::new(),
-            row_count: 0,
+        };
+        if args.len() > 1 {
+            let filename = args[1].clone();
+            buffer.filename = filename;
+            TextBuffer::load_file(&mut buffer);
+        } else {
+            buffer.rows.push(String::new());
         }
+        buffer
     }
 
-    pub(crate) fn load_file(&mut self, filename: &String) {
-        if let Ok(lines) = self.read_lines(filename) {
+    fn load_file(&mut self) {
+        if let Ok(lines) = self.read_lines(&self.filename) {
             for line in lines {
                 self.rows.push(line.expect("line"));
-                self.row_count += 1;
             }
+        }
+    }
+    pub fn write_file_to_disk(&self) {
+        let long_string = self.rows.join("\n");
+        if !self.filename.is_empty() {
+            let mut file = File::create(&self.filename).expect("error saving file");
+            file.write_all(long_string.as_bytes()).expect("error");
+        } else {
         }
     }
     fn read_lines<P>(&self, filename: P) -> Result<Lines<BufReader<File>>>

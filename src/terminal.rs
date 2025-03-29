@@ -1,4 +1,7 @@
-use crate::error::{AppError, Result};
+use crate::{
+    TextBuffer, buffer,
+    error::{AppError, Result},
+};
 
 use std::{
     io::{self, Read, Write, stdout},
@@ -6,16 +9,40 @@ use std::{
 };
 use termios::*;
 
-pub struct Terminal(Termios);
+pub struct Size {
+    pub x: i32,
+    pub y: i32,
+}
+pub struct Terminal {
+    termios: Termios,
+    pub size: Size,
+    pub camera: Size,
+    pub cursor: Size,
+    pub status_line_left: String,
+    pub status_line_right: String,
+}
 
 impl Terminal {
     pub fn new() -> Result<Self> {
         let fd = io::stdin().as_raw_fd();
-        let orig_termios = Self::store_term_data(fd)?;
+        let mut terminal = Self {
+            termios: Termios::from_fd(fd)?,
+            size: Size { x: 0, y: 0 },
+            camera: Size { x: 0, y: 0 },
+            cursor: Size { x: 0, y: 0 },
+            status_line_right: String::new(),
+            status_line_left: String::new(),
+        };
+
         Self::enable_raw_mode(fd)?;
-        Ok(Self(orig_termios))
+        // println!("enabling rawmode");
+        terminal.size = Self::get_window_size(&terminal)?;
+        Ok(terminal)
     }
     fn enable_raw_mode(fd: i32) -> Result<()> {
+        write!(io::stdout(), "\x1b[?1049h").expect("write");
+        stdout().flush().expect("flush");
+
         let mut termios = Termios::from_fd(fd)?;
         termios.c_iflag &= !(INPCK | ISTRIP | BRKINT | IXON | ICRNL);
         termios.c_oflag &= !(OPOST);
@@ -27,17 +54,12 @@ impl Terminal {
         tcsetattr(fd, TCSAFLUSH, &termios)?;
         Ok(())
     }
-    fn store_term_data(fd: i32) -> Result<Termios> {
-        let termios = Termios::from_fd(fd)?;
-        // tcgetattr(fd, &mut termios)?;
-        Ok(termios)
-    }
-    pub fn get_window_size(&self) -> Result<(i32, i32)> {
+    fn get_window_size(&self) -> Result<Size> {
         write!(io::stdout(), "\x1b[999C\x1b[999B")?;
-        stdout().flush().expect("err");
+        stdout().flush()?;
         Self::get_cursor_pos()
     }
-    fn get_cursor_pos() -> Result<(i32, i32)> {
+    fn get_cursor_pos() -> Result<Size> {
         let mut response = String::new();
         write!(io::stdout(), "\x1b[6n")?;
         stdout().flush()?;
@@ -56,11 +78,63 @@ impl Terminal {
         let parts: Vec<&str> = response[2..].split(';').collect();
         let rows = parts[0].parse::<i32>().unwrap_or(0);
         let cols = parts[1].parse::<i32>().unwrap_or(0);
-        Ok((rows, cols))
+        Ok(Size { x: cols, y: rows })
+    }
+    fn editor_draw_rows(&self, buffer: &TextBuffer, abuf: &mut String) {
+        let camera_y_end = self.camera.y + self.size.y - 1;
+        for y in self.camera.y..camera_y_end {
+            abuf.push_str("\x1b[K"); //clears from current position to end of line
+            if y < buffer.rows.len() as i32 {
+                if let Some(line) = buffer.rows.get(y as usize) {
+                    abuf.push_str(line);
+                    abuf.push_str("\r\n");
+                }
+            } else {
+                abuf.push_str("~\r\n");
+            }
+        }
+        abuf.push_str("\x1b[K"); //clears from current position to end of line
+        abuf.push_str(&self.status_line_left);
+        abuf.push_str(&format!(
+            "\x1b[{};{}H",
+            self.size.y,
+            self.size.x - self.status_line_right.len() as i32
+        ));
+        abuf.push_str(&self.status_line_right);
+        abuf.push_str("\r");
+    }
+    pub fn refresh_screen(&mut self, pos: &Size, buffer: &TextBuffer) {
+        self.cursor.x = pos.x % self.size.x;
+        self.cursor.y = pos.y % self.size.y;
+        self.camera.x = pos.x / self.size.x;
+        self.camera.y = pos.y / self.size.y;
+        let mut abuf = String::new();
+        abuf.push_str("\x1b[?25l"); //hide cursor
+        abuf.push_str("\x1b[H"); //cursor upperleft 
+        self.editor_draw_rows(buffer, &mut abuf);
+        // abuf.push_str(&format!(
+        //     "{},{},{},{},{},{}",
+        //     self.camera_x,
+        //     self.cursor_x,
+        //     self.camera_y,
+        //     self.cursor_y,
+        //     self.screen_rows,
+        //     self.buffer.rows[(self.camera_y + self.cursor_y) as usize].len() as i32 - 1,
+        // ));
+        abuf.push_str(&format!(
+            "\x1b[{};{}H",
+            self.cursor.y + 1,
+            self.cursor.x + 1
+        ));
+        abuf.push_str("\x1b[?25h");
+        write!(io::stdout(), "{}", abuf);
+        stdout().flush().expect("flush");
     }
 }
 impl Drop for Terminal {
     fn drop(&mut self) {
-        tcsetattr(io::stdin().as_raw_fd(), TCSAFLUSH, &self.0).expect("tcsetattr");
+        tcsetattr(io::stdin().as_raw_fd(), TCSAFLUSH, &self.termios).expect("tcsetattr");
+        // write!(io::stdout(), "\x1b[?1049l").expect("write");
+        stdout().flush().expect("flush");
     }
 }

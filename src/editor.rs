@@ -1,6 +1,7 @@
-use crate::buffer::TextBuffer;
+use crate::buffer::{self, TextBuffer};
 use crate::error::{AppError, Result};
-use crate::terminal::Terminal;
+use crate::terminal::{Size, Terminal};
+use std::cmp;
 use std::io::{self, Read, Write, stdout};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,7 @@ enum NormalAction {
     NewLine(Direction),
     Unknown,
 }
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CammandModeAction {
     ChangeMode(EditorModes),
@@ -35,61 +37,42 @@ enum CammandModeAction {
 
 pub struct Editor {
     terminal: Terminal,
-    screen_rows: i32,
-    screen_cols: i32,
-    camera_x: i32,
-    camera_y: i32,
-    cursor_x: i32,
-    cursor_y: i32,
     buffer: TextBuffer,
-    pub exitFlag: bool,
+    pos: Size,
+    pub exit_flag: bool,
     pub mode: EditorModes,
 }
 
 impl Editor {
-    pub fn new(buffer: TextBuffer) -> Result<Self> {
-        let terminal = Terminal::new()?;
-        let (screen_rows, screen_cols) = terminal.get_window_size()?;
-        Ok(Self {
+    pub fn new() -> Self {
+        let buffer = TextBuffer::new();
+        let terminal = Terminal::new().expect("error loading terminal");
+        Self {
             terminal,
-            screen_rows,
-            screen_cols,
-            camera_y: 0,
-            camera_x: 0,
-            cursor_x: 0,
-            cursor_y: 0,
-            exitFlag: false,
             buffer,
+            exit_flag: false,
+            pos: Size { x: 0, y: 0 },
             mode: EditorModes::Normal,
-        })
+        }
     }
-
-    fn editor_draw_rows(&self, abuf: &mut String) {
-        let camera_y_end = self.camera_y + self.screen_rows;
-        for y in self.camera_y..camera_y_end {
-            abuf.push_str("\x1b[K");
-            if y < self.buffer.row_count as i32 {
-                if let Some(line) = self.buffer.rows.get(y as usize) {
-                    abuf.push_str(line);
-                    if y < camera_y_end - 1 {
-                        abuf.push_str("\r\n");
-                    } else {
-                        abuf.push_str("\r");
-                    }
-                }
-            } else {
-                abuf.push_str("~\r\n");
+    pub fn run(&mut self) {
+        loop {
+            self.terminal.refresh_screen(&self.pos, &self.buffer);
+            self.process_keypress();
+            if self.exit_flag {
+                break;
             }
         }
     }
+
     fn insert_text(&mut self, c: u8) {
         if !((c) < 32) {
             self.buffer
                 .rows
-                .get_mut((self.camera_y + self.cursor_y) as usize)
+                .get_mut((self.pos.y) as usize)
                 .unwrap()
-                .insert((self.camera_x + self.cursor_x) as usize, c as char);
-            self.cursor_x += 1;
+                .insert((self.pos.x) as usize, c as char);
+            self.pos.x += 1;
         }
     }
     fn insert_newline(&mut self, direction: Direction) {
@@ -97,41 +80,17 @@ impl Editor {
             Direction::Up => {
                 self.buffer
                     .rows
-                    .insert((self.camera_y + self.cursor_y) as usize, String::new());
+                    .insert((self.pos.y) as usize, String::new());
             }
             Direction::Down => {
                 self.buffer
                     .rows
-                    .insert((self.camera_y + self.cursor_y + 1) as usize, String::new());
-                self.cursor_y += 1;
+                    .insert((self.pos.y + 1) as usize, String::new());
+                self.pos.y += 1;
             }
             _ => (),
         }
-        self.cursor_x = 0;
-    }
-
-    pub(crate) fn refresh_screen(&mut self) {
-        let mut abuf = String::new();
-        abuf.push_str("\x1b[?25l");
-        abuf.push_str("\x1b[H");
-        self.editor_draw_rows(&mut abuf);
-        abuf.push_str(&format!(
-            "{},{},{},{},{},{}",
-            self.camera_x,
-            self.cursor_x,
-            self.camera_y,
-            self.cursor_y,
-            (self.camera_y + self.cursor_y) as usize,
-            self.buffer.rows[(self.camera_y + self.cursor_y) as usize].len() as i32 - 1,
-        ));
-        abuf.push_str(&format!(
-            "\x1b[{};{}H",
-            self.cursor_y + 1,
-            self.cursor_x + 1
-        ));
-        abuf.push_str("\x1b[?25h");
-        write!(io::stdout(), "{}", abuf);
-        stdout().flush().expect("flush");
+        self.pos.x = 0;
     }
 
     fn read_key(&self) -> u8 {
@@ -154,119 +113,117 @@ impl Editor {
         buffer[0]
     }
     fn move_cursor(&mut self, direction: Direction) {
-        let buffer_pos_y = (self.camera_y + self.cursor_y) as usize;
-        let buffer_pos_x = (self.camera_x + self.cursor_x) as usize;
         match direction {
             Direction::Left => {
-                if self.cursor_x > 0 {
-                    self.cursor_x -= 1;
+                if self.pos.x > 0 {
+                    self.pos.x -= 1;
                 }
             }
             Direction::StartOfLine => {
-                self.cursor_x = 0;
+                self.pos.x = 0;
             }
             Direction::EndOfRows => {
-                self.cursor_y = self.screen_rows - 1;
-                self.camera_y = self.buffer.rows.len() as i32 - self.screen_rows;
+                self.pos.y = (self.buffer.rows.len() as i32) - 1;
             }
             Direction::StartOfNonWhiteSpace => {
-                self.cursor_x = self.buffer.rows[buffer_pos_y]
+                self.pos.x = self.buffer.rows[self.pos.y as usize]
                     .chars()
                     .position(|c| c != ' ')
                     .unwrap() as i32;
             }
             Direction::EndOfLine => {
-                self.cursor_x = self.buffer.rows[buffer_pos_y].len() as i32 - 1;
+                self.pos.x = self.buffer.rows[self.pos.y as usize].len() as i32 - 1;
             }
             Direction::Right => {
-                if self.cursor_x < self.buffer.rows[buffer_pos_y].len() as i32 - 1 {
-                    self.cursor_x += 1;
+                if self.pos.x < self.buffer.rows[self.pos.y as usize].len() as i32 - 1 {
+                    self.pos.x += 1;
                 }
             }
             Direction::Up => {
-                if self.cursor_y > 0 {
-                    if self.cursor_x != 0
-                        && self.cursor_x == self.buffer.rows[buffer_pos_y].len() as i32 - 1
+                if self.pos.y > 0 {
+                    if self.pos.x != 0
+                        && self.pos.x == self.buffer.rows[self.pos.y as usize].len() as i32 - 1
                     {
-                        self.cursor_x = self.buffer.rows[buffer_pos_y - 1].len() as i32 - 1;
+                        self.pos.x = self.buffer.rows[self.pos.y as usize - 1].len() as i32 - 1;
                     }
-                    self.cursor_y -= 1;
-
-                    if self.cursor_x > self.buffer.rows[buffer_pos_y - 1].len() as i32 - 1 {
-                        self.cursor_x = self.buffer.rows[buffer_pos_y - 1].len() as i32 - 1;
+                    self.pos.y -= 1;
+                    if self.pos.x != 0
+                        && self.pos.x >= self.buffer.rows[self.pos.y as usize].len() as i32 - 1
+                    {
+                        self.pos.x = self.buffer.rows[self.pos.y as usize].len() as i32 - 1;
                     }
-                } else if self.camera_y > 0 {
-                    self.camera_y -= 1;
                 }
             }
             Direction::Down => {
-                if self.cursor_y < self.screen_rows - 1 {
-                    if self.cursor_x != 0
-                        && self.cursor_x == self.buffer.rows[buffer_pos_y].len() as i32 - 1
+                if self.pos.y < self.buffer.rows.len() as i32 - 1 {
+                    if self.pos.x != 0
+                        && self.pos.x == self.buffer.rows[self.pos.y as usize].len() as i32 - 1
                     {
-                        self.cursor_x = self.buffer.rows[buffer_pos_y + 1].len() as i32 - 1;
+                        self.pos.x = self.buffer.rows[self.pos.y as usize + 1].len() as i32 - 1;
                     }
-                    self.cursor_y += 1;
-                    if self.cursor_x > self.buffer.rows[buffer_pos_y + 1].len() as i32 - 1 {
-                        self.cursor_x = self.buffer.rows[buffer_pos_y + 1].len() as i32 - 1;
+                    self.pos.y += 1;
+                    if self.pos.x != 0
+                        && self.pos.x >= self.buffer.rows[self.pos.y as usize].len() as i32 - 1
+                    {
+                        self.pos.x = self.buffer.rows[self.pos.y as usize].len() as i32 - 1;
                     }
-                } else if self.camera_y < self.buffer.row_count as i32 - self.screen_rows + 1 {
-                    self.camera_y += 1;
                 }
             }
         }
     }
 
-    fn map_key_to_action_normal_mode(&mut self, c: u8) -> Vec<NormalAction> {
+    fn map_key_to_action_normal_mode(&mut self, c: u8) {
         match c {
-            b'h' => vec![NormalAction::Move(Direction::Left)],
-            b'j' => vec![NormalAction::Move(Direction::Down)],
-            b'k' => vec![NormalAction::Move(Direction::Up)],
-            b'l' => vec![NormalAction::Move(Direction::Right)],
-            b'$' => vec![NormalAction::Move(Direction::EndOfLine)],
-            b'0' => vec![NormalAction::Move(Direction::StartOfLine)],
-            b'^' => vec![NormalAction::Move(Direction::StartOfNonWhiteSpace)],
-            b'i' => vec![NormalAction::ChangeMode(EditorModes::Insert)],
+            b'h' => self.normal_action(NormalAction::Move(Direction::Left)),
+            b'j' => self.normal_action(NormalAction::Move(Direction::Down)),
+            b'k' => self.normal_action(NormalAction::Move(Direction::Up)),
+            b'l' => self.normal_action(NormalAction::Move(Direction::Right)),
+            b'$' => self.normal_action(NormalAction::Move(Direction::EndOfLine)),
+            b'0' => self.normal_action(NormalAction::Move(Direction::StartOfLine)),
+            b'^' => self.normal_action(NormalAction::Move(Direction::StartOfNonWhiteSpace)),
+            b'G' => self.normal_action(NormalAction::Move(Direction::EndOfRows)),
+            b'i' => self.normal_action(NormalAction::ChangeMode(EditorModes::Insert)),
+            b':' => {
+                self.normal_action(NormalAction::ChangeMode(EditorModes::Command));
+                self.terminal.status_line_left = String::from(":");
+            }
             b'a' => {
-                self.cursor_x += 1;
-                vec![NormalAction::ChangeMode(EditorModes::Insert)]
+                self.pos.x = cmp::min(
+                    self.pos.x + 1,
+                    self.buffer.rows[self.pos.y as usize].len() as i32,
+                );
+                self.normal_action(NormalAction::ChangeMode(EditorModes::Insert))
             }
             b'A' => {
-                let mut temp = vec![NormalAction::Move(Direction::EndOfLine)];
-                self.cursor_x += 1;
-                temp.push(NormalAction::ChangeMode(EditorModes::Insert));
-                temp
+                self.normal_action(NormalAction::Move(Direction::EndOfLine));
+                self.pos.x += 1;
+                self.normal_action(NormalAction::ChangeMode(EditorModes::Insert))
             }
-            b'I' => vec![
-                NormalAction::Move(Direction::StartOfNonWhiteSpace),
-                NormalAction::ChangeMode(EditorModes::Insert),
-            ],
-
-            b'o' => vec![
-                NormalAction::NewLine(Direction::Down),
-                NormalAction::ChangeMode(EditorModes::Insert),
-            ],
-            b'O' => vec![
-                NormalAction::NewLine(Direction::Up),
-                NormalAction::ChangeMode(EditorModes::Insert),
-            ],
-            b'G' => vec![NormalAction::Move(Direction::EndOfRows)],
-            b':' => vec![NormalAction::ChangeMode(EditorModes::Command)],
-            _ => vec![NormalAction::Unknown],
+            b'I' => {
+                self.normal_action(NormalAction::Move(Direction::StartOfNonWhiteSpace));
+                self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
+            }
+            b'o' => {
+                self.normal_action(NormalAction::NewLine(Direction::Down));
+                self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
+            }
+            b'O' => {
+                self.normal_action(NormalAction::NewLine(Direction::Up));
+                self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
+            }
+            _ => self.normal_action(NormalAction::Unknown),
+        }
+        // self.status_line_right = String::new();
+    }
+    fn normal_action(&mut self, action: NormalAction) {
+        match action {
+            NormalAction::Move(direction) => self.move_cursor(direction),
+            NormalAction::ChangeMode(editormode) => self.mode = editormode,
+            NormalAction::NewLine(direction) => self.insert_newline(direction),
+            _ => (),
         }
     }
 
-    fn process_normal_mode(&mut self, c: u8) {
-        let actions = self.map_key_to_action_normal_mode(c);
-        for action in actions {
-            match action {
-                NormalAction::Move(direction) => self.move_cursor(direction),
-                NormalAction::ChangeMode(editormode) => self.mode = editormode,
-                NormalAction::NewLine(direction) => self.insert_newline(direction),
-                _ => (),
-            }
-        }
-    }
     fn process_insert_mode(&mut self, c: u8) {
         if c == b'\x1b' {
             self.mode = EditorModes::Normal;
@@ -276,22 +233,65 @@ impl Editor {
     }
     fn process_command_mode(&mut self, c: u8) {
         if c == b'\x1b' {
+            self.terminal.status_line_left = String::new();
             self.mode = EditorModes::Normal;
             return;
         }
-        if c == b'q' {
-            self.exitFlag = true;
+        if c == 13 {
+            //enter key
+            self.do_command();
+            // self.exit_flag = true;
+            // self.mode = EditorModes::Normal;
             return;
         }
-        if c == b'w' {
-            // self.exitFlag = true;
-            return;
+        if c > 32 {
+            self.terminal.status_line_left.push(c as char);
+        }
+    }
+    fn do_command(&mut self) {
+        if self
+            .terminal
+            .status_line_left
+            .as_str()
+            .starts_with("enter a filename: ")
+        {
+            self.buffer.filename.push_str(
+                &(self
+                    .terminal
+                    .status_line_left
+                    .strip_prefix("enter a filename: ")
+                    .unwrap()),
+            );
+            self.save_file();
+        } else {
+            match self.terminal.status_line_left.as_str() {
+                ":w" => self.save_file(),
+                ":q" => self.exit_flag = true,
+                ":wq" => {
+                    self.save_file();
+                    if self.mode == EditorModes::Normal {
+                        self.exit_flag = true;
+                    }
+                }
+                _ => self.terminal.status_line_left = String::from("!not a valid command."),
+            }
+        }
+    }
+    fn save_file(&mut self) {
+        if self.buffer.filename.is_empty() {
+            self.terminal.status_line_left = String::from("enter a filename: ");
+        } else {
+            self.buffer.write_file_to_disk();
+            self.mode = EditorModes::Normal;
         }
     }
     pub(crate) fn process_keypress(&mut self) {
         let c = self.read_key();
+        if c > 32 {
+            // self.status_line_right.push(c as char);
+        }
         match self.mode {
-            EditorModes::Normal => self.process_normal_mode(c),
+            EditorModes::Normal => self.map_key_to_action_normal_mode(c),
             EditorModes::Insert => self.process_insert_mode(c),
             EditorModes::Command => self.process_command_mode(c),
             _ => eprintln!("error"),
