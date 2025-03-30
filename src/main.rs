@@ -1,4 +1,5 @@
 mod buffer;
+pub mod commandmode;
 mod editor;
 mod error;
 mod file;
@@ -9,6 +10,6 @@ use crate::editor::Editor;
 use crate::error::Result;
 
 fn main() -> Result<()> {
-    Editor::new()?.run();
+    Editor::new()?.run()?;
     Ok(())
 }

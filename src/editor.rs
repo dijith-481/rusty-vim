@@ -1,6 +1,8 @@
 use crate::buffer::TextBuffer;
-use crate::error::{AppError, FileError, Result};
+use crate::commandmode::{CommandMode, CommandReturn};
+use crate::error::Result;
 
+use crate::normalmode::NormalMode;
 use crate::normalmode::motions::NormalAction;
 use crate::normalmode::{motions::Motion, operation_pending::PendingOperations};
 use crate::terminal::{Position, Terminal};
@@ -23,33 +25,36 @@ pub struct Editor {
     pub exit_flag: bool,
     pub mode: EditorModes,
     pos: Position,
-    pending_operations: PendingOperations,
+    normal_mode: NormalMode,
+    command_mode: CommandMode,
 }
 
 impl Editor {
     pub fn new() -> Result<Self> {
         let buffer = TextBuffer::new()?;
-        let terminal = Terminal::new(buffer.rows.len())?;
+        let terminal = Terminal::new(buffer.rows.len(), &buffer.filename)?;
         Ok(Self {
+            normal_mode: NormalMode::new(),
+            command_mode: CommandMode::new(),
             terminal,
             buffer,
             exit_flag: false,
             mode: EditorModes::Normal,
             pos: Position { x: 0, y: 0 },
-            pending_operations: PendingOperations::new(),
         })
     }
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<()> {
         loop {
             if self.exit_flag {
-                return;
+                return Ok(());
             }
-            self.process_keypress();
-            self.render_ui();
+            self.process_keypress()?;
+            self.render_ui()?;
         }
     }
-    fn render_ui(&mut self) {
-        self.terminal.refresh_screen(&self.buffer, &self.pos);
+    fn render_ui(&mut self) -> Result<()> {
+        self.terminal.refresh_screen(&self.buffer, &self.pos)?;
+        Ok(())
     }
 
     fn move_cursor(&mut self, direction: Motion) {
@@ -77,7 +82,9 @@ impl Editor {
                 )
             }
             Motion::StartOfLine => self.pos.x = 0,
-            Motion::GoToLine => self.pos.y = self.pending_operations.repeat.saturating_sub(1),
+            Motion::GoToLine => {
+                self.pos.y = self.normal_mode.pending_operations.repeat.saturating_sub(1)
+            }
             Motion::EndOfRows => self.pos = go_to_last_row(&self.buffer, &self.pos),
             Motion::ParagraphEnd => {
                 self.pos.y = get_next_empty_string(&self.buffer.rows, self.pos.y)
@@ -135,23 +142,24 @@ impl Editor {
         // let mut abuf = String::new();
         // abuf.push_str("\x1b[H"); //cursor upperleft
         // abuf.push_str("      p"); //cursor upperleft
-        // abuf.push(self.pending_operations.motion); //cursor upperleft
+        // abuf.push(self.normal_mode.pending_operations.motion); //cursor upperleft
         // abuf.push_str("v      "); //cursor upperleft
-        self.terminal.status_line_left = format!("{}", self.pending_operations.repeat);
-        for i in 0..max(self.pending_operations.repeat, 1) {
+        // self.terminal.status_line_left = format!("{}", self.normal_mode.pending_operations.repeat);
+        for i in 0..max(self.normal_mode.pending_operations.repeat, 1) {
             // c    abuf.push_str("mmmm"); //cursor upperleft
             // self.terminal.status_line_right = String::from("processing normal ode");
-            if self.pending_operations.is_action_given() {
-                self.terminal.status_line_right = String::from(self.pending_operations.action);
-                match self.pending_operations.action {
-                    'd' => match self.pending_operations.motion {
+            if self.normal_mode.pending_operations.is_action_given() {
+                self.terminal.status_line_right =
+                    String::from(self.normal_mode.pending_operations.action);
+                match self.normal_mode.pending_operations.action {
+                    'd' => match self.normal_mode.pending_operations.motion {
                         'd' => self.buffer.delete_row(&mut self.pos),
                         _ => (),
                     },
-                    'g' => match self.pending_operations.motion {
+                    'g' => match self.normal_mode.pending_operations.motion {
                         'g' => {
                             self.normal_action(NormalAction::Move(Motion::GoToLine));
-                            self.terminal.status_line_left = format!("{}", i);
+                            // self.terminal.status_line_left = format!("{}", i);
                             break;
                         }
 
@@ -161,9 +169,9 @@ impl Editor {
                 }
             } else {
                 // abuf.push_str("motion"); //cursor upperleft
-                // abuf.push(self.pending_operations.motion); //cursor upperleft
+                // abuf.push(self.normal_mode.pending_operations.motion); //cursor upperleft
                 // abuf.push_str("motion"); //cursor upperleft
-                match self.pending_operations.motion {
+                match self.normal_mode.pending_operations.motion {
                     'h' => self.normal_action(NormalAction::Move(Motion::Left)),
                     'j' => self.normal_action(NormalAction::Move(Motion::Down)),
                     'k' => self.normal_action(NormalAction::Move(Motion::Up)),
@@ -179,19 +187,20 @@ impl Editor {
                     'M' => self.normal_action(NormalAction::Move(Motion::PageMiddle)),
                     'L' => self.normal_action(NormalAction::Move(Motion::PageBottom)),
                     'G' => {
-                        if self.pending_operations.repeat == 0 {
+                        if self.normal_mode.pending_operations.repeat == 0 {
                             self.normal_action(NormalAction::Move(Motion::EndOfRows));
-                            self.terminal.status_line_left = format!("{}", i);
+                            // self.terminal.status_line_left = format!("{}", i);
                             break;
                         }
                         self.normal_action(NormalAction::Move(Motion::GoToLine));
-                        self.terminal.status_line_left = format!("{}", i);
+                        // self.terminal.status_line_left = format!("{}", i);
                         break;
                     }
                     'i' => self.normal_action(NormalAction::ChangeMode(EditorModes::Insert)),
                     ':' => {
                         self.normal_action(NormalAction::ChangeMode(EditorModes::Command));
-                        self.terminal.status_line_left = String::from(":");
+                        self.process_command_mode(self.normal_mode.pending_operations.motion as u8);
+                        // self.terminal.status_line_left = String::from(":");
                     }
                     'a' => {
                         if !self.buffer.rows.get(self.pos.y).unwrap().len() == 0 {
@@ -224,7 +233,7 @@ impl Editor {
                 }
             }
         }
-        self.pending_operations.reset();
+        self.normal_mode.pending_operations.reset();
 
         // write!(io::stdout(), "{}", abuf);
         // stdout().flush().expect("flush");
@@ -234,10 +243,10 @@ impl Editor {
         if c < 32 {
             return;
         }
-        self.pending_operations.insert_key(c as char);
+        self.normal_mode.pending_operations.insert_key(c as char);
         println!("self ");
 
-        let action_given = self.pending_operations.is_motion_given();
+        let action_given = self.normal_mode.pending_operations.is_motion_given();
         if action_given {
             println!("given ");
             self.handle_operation();
@@ -286,68 +295,50 @@ impl Editor {
         }
     }
     fn process_command_mode(&mut self, c: u8) {
-        if c == b'\x1b' {
-            self.terminal.status_line_left = String::new();
-            self.mode = EditorModes::Normal;
-            return;
-        }
-        if c == 13 {
-            //enter key
-            self.do_command();
-            // self.exit_flag = true;
-            // self.mode = EditorModes::Normal;
-            return;
-        }
-        if c > 32 {
-            self.terminal.status_line_left.push(c as char);
-        }
-    }
-    fn do_command(&mut self) {
-        if self
-            .terminal
-            .status_line_left
-            .as_str()
-            .starts_with("enter a filename: ")
-        {
-            self.buffer.filename.push_str(
-                &(self
-                    .terminal
-                    .status_line_left
-                    .strip_prefix("enter a filename: ")
-                    .unwrap()),
-            );
-            self.save_file();
-        } else {
-            match self.terminal.status_line_left.as_str() {
-                ":w" => self.save_file(),
-                ":q" => self.exit_flag = true,
-                ":wq" => {
-                    self.save_file();
-                    if self.mode == EditorModes::Normal {
-                        self.exit_flag = true;
-                    }
-                }
-                _ => self.terminal.status_line_left = String::from("!not a valid command."),
+        let value = self.command_mode.handle_key(c);
+        match value {
+            CommandReturn::Quit => self.exit_flag = true,
+            CommandReturn::None => {
+                self.terminal.status_line_right = String::from("None");
+            }
+            CommandReturn::Save => {
+                self.terminal.status_line_right = String::from("Save");
+            }
+            CommandReturn::Escape => {
+                self.mode = EditorModes::Normal;
+                self.terminal.status_line_right = String::from("Escape");
             }
         }
-    }
-    fn save_file(&mut self) {
-        if self.buffer.filename.is_empty() {
-            self.terminal.status_line_left = String::from("enter a filename: ");
+        if self.mode == EditorModes::Command {
+            self.terminal.command_line = String::from(":");
         } else {
-            self.buffer.write_buffer_to_disk();
-            self.mode = EditorModes::Normal;
+            self.terminal.command_line = String::new();
         }
+        self.terminal
+            .command_line
+            .push_str(&self.command_mode.command);
+        // }
     }
-    fn process_keypress(&mut self) {
-        let c = self.terminal.read_key();
+    fn process_keypress(&mut self) -> Result<()> {
+        let c = self.terminal.read_key()?;
         match self.mode {
-            EditorModes::Normal => self.process_normal_mode(c),
-            EditorModes::Insert => self.process_insert_mode(c),
-            EditorModes::Command => self.process_command_mode(c),
+            EditorModes::Normal => {
+                self.process_normal_mode(c);
+                self.terminal.status_line_left = String::from("Normal");
+            }
+            EditorModes::Insert => {
+                self.process_insert_mode(c);
+                self.terminal.status_line_left = String::from("Insert");
+            }
+            EditorModes::Command => {
+                self.process_command_mode(c);
+                self.terminal.status_line_left = String::from("Command");
+            }
         }
+        Ok(())
     }
 }
 impl Drop for Editor {
     fn drop(&mut self) {}
 }
+
