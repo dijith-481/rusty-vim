@@ -1,17 +1,18 @@
-use crate::{editor::Direction, error::Result, terminal::Size};
+use crate::{editor::Motion, error::Result, terminal::Size};
 use std::{
     env::{self},
     fs::File,
     io::{self, BufRead, BufReader, Lines, Write},
     path::Path,
 };
-pub(crate) struct TextBuffer {
+
+pub struct TextBuffer {
     pub filename: String,
     pub rows: Vec<String>,
 }
 
 impl TextBuffer {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let args: Vec<String> = env::args().collect();
         let mut buffer = Self {
             filename: String::new(),

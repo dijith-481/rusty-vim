@@ -1,6 +1,10 @@
 use crate::buffer::{self, TextBuffer};
 use crate::error::{AppError, Result};
 use crate::terminal::{Size, Terminal};
+use crate::utils::{
+    get_first_non_white_space, get_next_empty_string, get_next_word, get_previous_empty_string,
+    get_word_after_white_space,
+};
 use std::cmp::{self, max};
 use std::collections::HashSet;
 use std::io::{self, Read, Write, stdout};
@@ -14,19 +18,27 @@ pub enum EditorModes {
     Visual,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
+pub enum Motion {
     Left,
     Right,
     Up,
     Down,
     EndOfLine,
     EndOfRows,
+    PageTop,
+    PageMiddle,
+    PageBottom,
+    GoToLine,
     StartOfLine,
     StartOfNonWhiteSpace,
+    Word,
+    ParagraphEnd,
+    ParagraphStart,
+    WORD,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NormalAction {
-    Move(Direction),
+    Move(Motion),
     ChangeMode(EditorModes),
     NewLine,
     Delete,
@@ -39,7 +51,7 @@ enum CammandModeAction {
 }
 struct PendingOperations {
     is_pending: bool,
-    repeat: i32,
+    repeat: usize,
     action: char,
     valid_actions: HashSet<char>,
     valid_modifiers: HashSet<char>,
@@ -47,14 +59,16 @@ struct PendingOperations {
     modifier: char,
     motion: char,
 }
+
 impl PendingOperations {
     fn new() -> PendingOperations {
-        let keys_action = ['d', 'f'];
+        let keys_action = ['d', 'f', 'g'];
         let valid_actions: HashSet<char> = keys_action.iter().cloned().collect();
         let keys_modifier = ['i', 'a', 'f'];
         let valid_modifiers: HashSet<char> = keys_modifier.iter().cloned().collect();
         let keys_motion = [
-            'h', 'j', 'k', 'l', 'x', 'y', 'd', 'g', 'G', 'a', 'i', 'A', 'o', 'O', ':',
+            'h', 'j', 'k', 'l', 'x', 'd', 'g', 'G', 'a', 'i', 'A', 'o', 'O', 'H', 'M', 'L', 'w',
+            'W', 'e', '{', '}', ':', 'y', '^', '$', '0',
         ];
         let valid_motions: HashSet<char> = keys_motion.iter().cloned().collect();
         Self {
@@ -96,16 +110,11 @@ impl PendingOperations {
         self.motion != '\0'
     }
     fn insert_key(&mut self, key: char) {
-        // let mut abuf = String::new();
-        // abuf.push_str("\x1b[H"); //cursor upperleft
-        // abuf.push_str("dlfa "); //cursor upperleft
-        // abuf.push(self.motion); //cursor upperleft
-        // abuf.push(key); //cursor upperleft
-        // abuf.push(self.action); //cursor upperleft
-        // abuf.push_str("       "); //cursor upperleft
-        if key.is_numeric() {
-            self.repeat *= 10;
-            self.repeat += key.to_digit(10).unwrap() as i32;
+        if key != '0' && key.is_numeric() {
+            self.repeat = self.repeat.saturating_mul(10);
+            self.repeat = self
+                .repeat
+                .saturating_add(key.to_digit(10).map_or(0, |digit| digit as usize));
         } else if !self.is_action_given() && self.valid_actions.contains(&key) {
             self.action = key;
         } else if !self.is_modifier_given() && self.valid_modifiers.contains(&key) {
@@ -114,9 +123,6 @@ impl PendingOperations {
             self.motion = key;
         } else {
         }
-
-        // write!(io::stdout(), "{}", abuf);
-        // stdout().flush().expect("flush");
     }
 }
 
@@ -152,69 +158,89 @@ impl Editor {
         }
     }
 
-    fn move_cursor(&mut self, direction: Direction) {
+    fn move_cursor(&mut self, direction: Motion) {
         match direction {
-            Direction::Left => {
-                if self.pos.x > 0 {
-                    self.pos.x -= 1;
+            Motion::Left => self.pos.x = self.pos.x.saturating_sub(1),
+            Motion::PageTop => self.pos.y -= self.terminal.top_screen_pos(),
+            Motion::PageMiddle => self.pos.y -= self.terminal.top_screen_pos(),
+            Motion::PageBottom => self.pos.y -= self.terminal.bottom_screen_pos(),
+            Motion::StartOfLine => self.pos.x = 0,
+            Motion::GoToLine => self.pos.y = self.pending_operations.repeat.saturating_sub(1),
+            Motion::EndOfRows => self.pos.y = self.buffer.rows.len() - 1,
+            Motion::ParagraphEnd => {
+                self.pos.y = get_previous_empty_string(&self.buffer.rows, self.pos.y)
+            }
+            Motion::ParagraphStart => {
+                self.pos.y = get_next_empty_string(&self.buffer.rows, self.pos.y)
+            }
+            Motion::Word => {
+                let word = get_next_word(self.buffer.rows.get(self.pos.y).unwrap(), self.pos.x);
+                if word == self.buffer.rows.get(self.pos.y).unwrap().len() {
+                    self.pos.y += 1;
+                    let line = self.buffer.rows.get(self.pos.y).unwrap();
+                    self.pos.x = get_first_non_white_space(line);
+                } else {
+                    self.pos.x = word;
                 }
             }
-            Direction::StartOfLine => {
-                self.pos.x = 0;
+            Motion::WORD => {
+                let word = get_word_after_white_space(
+                    self.buffer.rows.get(self.pos.y).unwrap(),
+                    self.pos.x,
+                );
+                if word == self.buffer.rows.get(self.pos.y).unwrap().len() {
+                    self.pos.y += 1;
+
+                    let line = self.buffer.rows.get(self.pos.y).unwrap();
+                    self.pos.x = get_first_non_white_space(line);
+                } else {
+                    self.pos.x = word;
+                }
             }
-            Direction::EndOfRows => {
-                self.pos.y = (self.buffer.rows.len()) - 1;
+            Motion::StartOfNonWhiteSpace => {
+                let line = self.buffer.rows.get(self.pos.y).unwrap();
+                self.pos.x = get_first_non_white_space(line);
             }
-            Direction::StartOfNonWhiteSpace => {
-                self.pos.x = self.buffer.rows[self.pos.y]
-                    .chars()
-                    .position(|c| c != ' ')
-                    .unwrap();
+
+            Motion::EndOfLine => {
+                self.pos.x = self
+                    .buffer
+                    .rows
+                    .get(self.pos.y)
+                    .map_or(0, |row| row.len().saturating_sub(1));
             }
-            Direction::EndOfLine => {
-                self.pos.x = cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 1) - 1;
-            }
-            Direction::Right => {
-                if self.pos.x < cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 1) - 1 {
+            Motion::Right => {
+                let current_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
+                if self.pos.x < current_row_len.saturating_sub(1) {
                     self.pos.x += 1;
                 }
             }
-            Direction::Up => {
-                if self.pos.y > 0 {
-                    if self.pos.x != 0
-                        && self.pos.x
-                            == cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 1) - 1
-                    {
-                        self.pos.x =
-                            cmp::max(self.buffer.rows.get(self.pos.y - 1).unwrap().len(), 1) - 1
-                    }
-                    self.pos.y -= 1;
-                    if self.pos.x != 0
-                        && self.pos.x
-                            >= cmp::max(self.buffer.rows.get(self.pos.y + 1).unwrap().len(), 1) - 1
-                    {
-                        self.pos.x =
-                            cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 1) - 1
-                    }
+            Motion::Up => {
+                let current_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
+                self.pos.y = self.pos.y.saturating_sub(1);
+                let new_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
+                if self.pos.x != 0
+                    && (self.pos.x == current_row_len.saturating_sub(1)
+                        || self.pos.x > new_row_len.saturating_sub(1))
+                {
+                    self.pos.x = new_row_len.saturating_sub(1);
+                } else {
+                    self.pos.x = 0;
                 }
             }
-            Direction::Down => {
-                if self.pos.y < self.buffer.rows.len() - 1 {
-                    if self.pos.x != 0
-                        && self.pos.x
-                            == cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 1) - 1
-                    {
-                        self.pos.x =
-                            cmp::max(self.buffer.rows.get(self.pos.y + 1).unwrap().len(), 1) - 1;
-                    }
+            Motion::Down => {
+                let current_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
+                if self.pos.y < self.buffer.rows.len().saturating_sub(1) {
                     self.pos.y += 1;
-                    if self.pos.x != 0
-                        && self.pos.x
-                            >= cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 1) - 1
-                    {
-                        self.pos.x =
-                            cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 1) - 1;
-                    }
+                }
+                let new_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
+                if self.pos.x != 0
+                    && (self.pos.x == current_row_len.saturating_sub(1)
+                        || self.pos.x > new_row_len.saturating_sub(1))
+                {
+                    self.pos.x = new_row_len.saturating_sub(1);
+                } else {
+                    self.pos.x = 0;
                 }
             }
         }
@@ -226,7 +252,7 @@ impl Editor {
         // abuf.push(self.pending_operations.motion); //cursor upperleft
         // abuf.push_str("v      "); //cursor upperleft
         self.terminal.status_line_left = format!("{}", self.pending_operations.repeat);
-        for _ in 0..max(self.pending_operations.repeat, 1) {
+        for i in 0..max(self.pending_operations.repeat, 1) {
             // c    abuf.push_str("mmmm"); //cursor upperleft
             // self.terminal.status_line_right = String::from("processing normal ode");
             if self.pending_operations.is_action_given() {
@@ -236,6 +262,15 @@ impl Editor {
                         'd' => self.buffer.delete_row(&mut self.pos),
                         _ => (),
                     },
+                    'g' => match self.pending_operations.motion {
+                        'g' => {
+                            self.normal_action(NormalAction::Move(Motion::GoToLine));
+                            self.terminal.status_line_left = format!("{}", i);
+                            break;
+                        }
+
+                        _ => (),
+                    },
                     _ => (),
                 }
             } else {
@@ -243,14 +278,30 @@ impl Editor {
                 // abuf.push(self.pending_operations.motion); //cursor upperleft
                 // abuf.push_str("motion"); //cursor upperleft
                 match self.pending_operations.motion {
-                    'h' => self.normal_action(NormalAction::Move(Direction::Left)),
-                    'j' => self.normal_action(NormalAction::Move(Direction::Down)),
-                    'k' => self.normal_action(NormalAction::Move(Direction::Up)),
-                    'l' => self.normal_action(NormalAction::Move(Direction::Right)),
-                    '$' => self.normal_action(NormalAction::Move(Direction::EndOfLine)),
-                    '0' => self.normal_action(NormalAction::Move(Direction::StartOfLine)),
-                    '^' => self.normal_action(NormalAction::Move(Direction::StartOfNonWhiteSpace)),
-                    'G' => self.normal_action(NormalAction::Move(Direction::EndOfRows)),
+                    'h' => self.normal_action(NormalAction::Move(Motion::Left)),
+                    'j' => self.normal_action(NormalAction::Move(Motion::Down)),
+                    'k' => self.normal_action(NormalAction::Move(Motion::Up)),
+                    'l' => self.normal_action(NormalAction::Move(Motion::Right)),
+                    '$' => self.normal_action(NormalAction::Move(Motion::EndOfLine)),
+                    '0' => self.normal_action(NormalAction::Move(Motion::StartOfLine)),
+                    '^' => self.normal_action(NormalAction::Move(Motion::StartOfNonWhiteSpace)),
+                    'w' => self.normal_action(NormalAction::Move(Motion::Word)),
+                    'W' => self.normal_action(NormalAction::Move(Motion::WORD)),
+                    'H' => self.normal_action(NormalAction::Move(Motion::PageTop)),
+                    '{' => self.normal_action(NormalAction::Move(Motion::ParagraphStart)),
+                    '}' => self.normal_action(NormalAction::Move(Motion::ParagraphEnd)),
+                    'M' => self.normal_action(NormalAction::Move(Motion::PageMiddle)),
+                    'L' => self.normal_action(NormalAction::Move(Motion::PageBottom)),
+                    'G' => {
+                        if self.pending_operations.repeat == 0 {
+                            self.normal_action(NormalAction::Move(Motion::EndOfRows));
+                            self.terminal.status_line_left = format!("{}", i);
+                            break;
+                        }
+                        self.normal_action(NormalAction::Move(Motion::GoToLine));
+                        self.terminal.status_line_left = format!("{}", i);
+                        break;
+                    }
                     'i' => self.normal_action(NormalAction::ChangeMode(EditorModes::Insert)),
                     ':' => {
                         self.normal_action(NormalAction::ChangeMode(EditorModes::Command));
@@ -263,12 +314,12 @@ impl Editor {
                         self.normal_action(NormalAction::ChangeMode(EditorModes::Insert))
                     }
                     'A' => {
-                        self.normal_action(NormalAction::Move(Direction::EndOfLine));
+                        self.normal_action(NormalAction::Move(Motion::EndOfLine));
                         self.pos.x += 1;
                         self.normal_action(NormalAction::ChangeMode(EditorModes::Insert))
                     }
                     'I' => {
-                        self.normal_action(NormalAction::Move(Direction::StartOfNonWhiteSpace));
+                        self.normal_action(NormalAction::Move(Motion::StartOfNonWhiteSpace));
                         self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
                     }
                     'o' => {

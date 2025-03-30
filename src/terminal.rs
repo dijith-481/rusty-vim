@@ -1,5 +1,5 @@
 use crate::{
-    TextBuffer,
+    buffer::TextBuffer,
     editor::EditorModes,
     error::{AppError, Result},
 };
@@ -112,9 +112,17 @@ impl Terminal {
     }
     pub fn refresh_screen(&mut self, buffer: &TextBuffer, pos: &Size) {
         self.cursor.x = pos.x % self.size.x;
-        self.cursor.y = pos.y % self.size.y;
-        self.camera.x = pos.x / self.size.x;
-        self.camera.y = pos.y / self.size.y;
+        // self.camera.x = pos.x / self.size.x;
+        self.cursor.y = pos.y.saturating_sub(self.camera.y);
+        if self.cursor.y >= self.size.y - 1 {
+            self.camera.y += self.cursor.y.saturating_sub(self.size.y - 2);
+            self.cursor.y = self.size.y - 2;
+        } else if self.cursor.y == 0 && self.camera.y != pos.y {
+            self.camera.y = self
+                .camera
+                .y
+                .saturating_sub(self.camera.y.saturating_sub(pos.y));
+        }
         let mut abuf = String::new();
         let cursor_type = self.get_cursor_code();
         abuf.push_str("\x1b[?25l"); //hide cursor
@@ -157,6 +165,15 @@ impl Terminal {
             return b'\x1b';
         }
         buffer[0]
+    }
+    pub fn middle_screen_pos(&self) -> usize {
+        self.cursor.y + self.size.y / 2 - 1
+    }
+    pub fn top_screen_pos(&self) -> usize {
+        self.cursor.y
+    }
+    pub fn bottom_screen_pos(&self) -> usize {
+        self.cursor.y + self.size.y - 2
     }
     fn get_cursor_code(&self) -> &str {
         match self.cursor_type {
