@@ -1,115 +1,20 @@
-use crate::buffer::{self, TextBuffer};
-use crate::error::{AppError, Result};
-use crate::terminal::{Size, Terminal};
+use crate::buffer::TextBuffer;
+use crate::error::{AppError, FileError, Result};
+
+use crate::normalmode::motions::NormalAction;
+use crate::normalmode::{motions::Motion, operation_pending::PendingOperations};
+use crate::terminal::{Position, Terminal};
 use crate::utils::{
     get_first_non_white_space, get_next_empty_string, get_next_word, get_previous_empty_string,
     get_word_after_white_space, go_down, go_to_last_row, go_up, handle_y_move,
 };
 use std::cmp::{self, max};
-use std::collections::HashSet;
-use std::io::{self, Read, Write, stdout};
-use std::iter::repeat;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorModes {
     Normal,
     Insert,
     Command,
-    Visual,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Motion {
-    Left,
-    Right,
-    Up,
-    Down,
-    EndOfLine,
-    EndOfRows,
-    PageTop,
-    PageMiddle,
-    PageBottom,
-    GoToLine,
-    StartOfLine,
-    StartOfNonWhiteSpace,
-    Word,
-    ParagraphEnd,
-    ParagraphStart,
-    WORD,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NormalAction {
-    Move(Motion),
-    ChangeMode(EditorModes),
-    NewLine,
-    Delete,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CammandModeAction {
-    ChangeMode(EditorModes),
-}
-struct PendingOperations {
-    repeat: usize,
-    action: char,
-    valid_actions: HashSet<char>,
-    valid_modifiers: HashSet<char>,
-    valid_motions: HashSet<char>,
-    modifier: char,
-    motion: char,
-}
-
-impl PendingOperations {
-    fn new() -> PendingOperations {
-        let keys_action = ['d', 'f', 'g'];
-        let valid_actions: HashSet<char> = keys_action.iter().cloned().collect();
-        let keys_modifier = ['i', 'a', 'f'];
-        let valid_modifiers: HashSet<char> = keys_modifier.iter().cloned().collect();
-        let keys_motion = [
-            'h', 'j', 'k', 'l', 'x', 'd', 'g', 'G', 'a', 'i', 'A', 'o', 'O', 'H', 'M', 'L', 'w',
-            'W', 'e', '{', '}', ':', 'y', '^', '$', '0',
-        ];
-        let valid_motions: HashSet<char> = keys_motion.iter().cloned().collect();
-        Self {
-            repeat: 0,
-            action: 0 as char,
-            modifier: 0 as char,
-            motion: 0 as char,
-            valid_actions,
-            valid_modifiers,
-            valid_motions,
-        }
-    }
-    fn reset(&mut self) {
-        self.repeat = 0;
-        self.action = 0 as char;
-        self.modifier = 0 as char;
-        self.motion = 0 as char;
-    }
-    fn is_action_given(&self) -> bool {
-        self.action != '\0'
-    }
-    fn is_modifier_given(&self) -> bool {
-        self.modifier != '\0'
-    }
-    fn is_motion_given(&self) -> bool {
-        self.motion != '\0'
-    }
-    fn insert_key(&mut self, key: char) {
-        if key != '0' && key.is_numeric() {
-            self.repeat = self.repeat.saturating_mul(10);
-            self.repeat = self
-                .repeat
-                .saturating_add(key.to_digit(10).map_or(0, |digit| digit as usize));
-        } else if !self.is_action_given() && self.valid_actions.contains(&key) {
-            self.action = key;
-        } else if !self.is_modifier_given() && self.valid_modifiers.contains(&key) {
-            self.modifier = key;
-        } else if !self.is_motion_given() && self.valid_motions.contains(&key) {
-            self.motion = key;
-        } else {
-        }
-    }
 }
 
 pub struct Editor {
@@ -117,31 +22,34 @@ pub struct Editor {
     buffer: TextBuffer,
     pub exit_flag: bool,
     pub mode: EditorModes,
-    pos: Size,
+    pos: Position,
     pending_operations: PendingOperations,
 }
 
 impl Editor {
-    pub fn new() -> Self {
-        let buffer = TextBuffer::new();
-        let terminal = Terminal::new().expect("error loading terminal");
-        Self {
+    pub fn new() -> Result<Self> {
+        let buffer = TextBuffer::new()?;
+        let terminal = Terminal::new(buffer.rows.len())?;
+        Ok(Self {
             terminal,
             buffer,
             exit_flag: false,
             mode: EditorModes::Normal,
-            pos: Size { x: 0, y: 0 },
+            pos: Position { x: 0, y: 0 },
             pending_operations: PendingOperations::new(),
-        }
+        })
     }
     pub fn run(&mut self) {
         loop {
-            self.terminal.refresh_screen(&self.buffer, &self.pos);
-            self.process_keypress();
             if self.exit_flag {
-                break;
+                return;
             }
+            self.process_keypress();
+            self.render_ui();
         }
+    }
+    fn render_ui(&mut self) {
+        self.terminal.refresh_screen(&self.buffer, &self.pos);
     }
 
     fn move_cursor(&mut self, direction: Motion) {
@@ -354,7 +262,7 @@ impl Editor {
             if self.pos.x >= self.buffer.rows[self.pos.y].len() {
                 self.pos.x = cmp::max(self.buffer.rows.get(self.pos.y).unwrap().len(), 0) - 1;
             } else if self.pos.x > 0 {
-                self.pos.x -= 1;
+                self.pos.x = self.pos.x.saturating_sub(1);
             }
 
             self.terminal.change_cursor(EditorModes::Normal);
@@ -433,14 +341,10 @@ impl Editor {
     }
     fn process_keypress(&mut self) {
         let c = self.terminal.read_key();
-        if c > 32 {
-            // self.status_line_right.push(c as char);
-        }
         match self.mode {
             EditorModes::Normal => self.process_normal_mode(c),
             EditorModes::Insert => self.process_insert_mode(c),
             EditorModes::Command => self.process_command_mode(c),
-            _ => eprintln!("error"),
         }
     }
 }

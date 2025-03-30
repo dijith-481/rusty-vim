@@ -3,27 +3,27 @@ use crate::{
     editor::EditorModes,
     error::{AppError, Result},
 };
-
 use std::{
     io::{self, Read, Write, stdout},
     os::fd::AsRawFd,
 };
 use termios::*;
 
-pub struct Size {
+pub struct Position {
     pub x: usize,
     pub y: usize,
 }
-impl Size {
+impl Position {
     pub fn new() -> Self {
         Self { x: 0, y: 0 }
     }
 }
 pub struct Terminal {
     termios: Termios,
-    pub size: Size,
-    pub camera: Size,
-    pub cursor: Size,
+    line_no_digits: usize,
+    pub size: Position,
+    pub camera: Position,
+    pub cursor: Position,
     pub status_line_left: String,
     pub status_line_right: String,
     cursor_type: CursorType,
@@ -34,20 +34,21 @@ enum CursorType {
 }
 
 impl Terminal {
-    pub fn new() -> Result<Self> {
+    pub fn new(buffer_len: usize) -> Result<Self> {
+        let line_no_digits = buffer_len.checked_ilog10().unwrap_or_else(|| 0) as usize + 1;
         let fd = io::stdin().as_raw_fd();
         let mut terminal = Self {
+            line_no_digits,
             termios: Termios::from_fd(fd)?,
-            size: Size { x: 0, y: 0 },
-            camera: Size { x: 0, y: 0 },
-            cursor: Size { x: 0, y: 0 },
+            size: Position { x: 0, y: 0 },
+            camera: Position { x: 0, y: 0 },
+            cursor: Position { x: 0, y: 0 },
             status_line_right: String::new(),
             status_line_left: String::new(),
             cursor_type: CursorType::Block,
         };
 
         Self::enable_raw_mode(fd)?;
-        // println!("enabling rawmode");
         terminal.size = Self::get_window_size(&terminal)?;
         Ok(terminal)
     }
@@ -66,18 +67,18 @@ impl Terminal {
         tcsetattr(fd, TCSAFLUSH, &termios)?;
         Ok(())
     }
-    fn get_window_size(&self) -> Result<Size> {
+    fn get_window_size(&self) -> Result<Position> {
         write!(io::stdout(), "\x1b[999C\x1b[999B")?;
         stdout().flush()?;
         Self::get_cursor_pos()
     }
-    fn get_cursor_pos() -> Result<Size> {
+    fn get_cursor_pos() -> Result<Position> {
         let mut response = String::new();
         write!(io::stdout(), "\x1b[6n")?;
         stdout().flush()?;
         let mut buf = [0; 1];
         loop {
-            io::stdin().read(&mut buf).expect("read");
+            io::stdin().read(&mut buf)?;
             let c = buf[0] as char;
             if c == 'R' {
                 break;
@@ -88,20 +89,22 @@ impl Terminal {
             return Err(AppError::TermError);
         }
         let parts: Vec<&str> = response[2..].split(';').collect();
-        let rows = parts[0].parse::<usize>().unwrap_or(0);
-        let cols = parts[1].parse::<usize>().unwrap_or(0);
-        Ok(Size { x: cols, y: rows })
+        let rows = parts[0].parse::<usize>()?;
+        let cols = parts[1].parse::<usize>()?;
+        Ok(Position { x: cols, y: rows })
     }
     fn editor_draw_rows(&self, buffer: &TextBuffer, abuf: &mut String) {
         let camera_y_end = self.camera.y + self.size.y - 1;
         for y in self.camera.y..camera_y_end {
             abuf.push_str("\x1b[K"); //clears from current position to end of line
-            if y < buffer.rows.len() {
-                if let Some(line) = buffer.rows.get(y as usize) {
-                    abuf.push_str(line);
-                    abuf.push_str("\r\n");
-                }
-            } else {
+            // if y < buffer.rows.len() {
+            if let Some(line) = buffer.rows.get(y as usize) {
+                abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits));
+                abuf.push_str(line);
+                abuf.push_str("\r\n");
+            }
+            // }
+            else {
                 abuf.push_str("~\r\n");
             }
         }
@@ -115,8 +118,8 @@ impl Terminal {
         abuf.push_str(&self.status_line_right);
         abuf.push_str("\r");
     }
-    pub fn refresh_screen(&mut self, buffer: &TextBuffer, pos: &Size) {
-        self.cursor.x = pos.x % self.size.x;
+    pub fn refresh_screen(&mut self, buffer: &TextBuffer, pos: &Position) {
+        self.cursor.x = pos.x % self.size.x + self.line_no_digits + 2;
         // self.camera.x = pos.x / self.size.x;
         self.cursor.y = pos.y.saturating_sub(self.camera.y);
         if self.cursor.y >= self.size.y - 1 {

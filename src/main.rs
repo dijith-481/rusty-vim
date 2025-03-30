@@ -1,11 +1,14 @@
 mod buffer;
 mod editor;
 mod error;
+mod file;
+mod normalmode;
 mod terminal;
 mod utils;
-// use buffer::TextBuffer;
-use editor::Editor;
+use crate::editor::Editor;
+use crate::error::Result;
 
-fn main() {
-    Editor::new().run();
+fn main() -> Result<()> {
+    Editor::new()?.run();
+    Ok(())
 }
