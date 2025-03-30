@@ -3,7 +3,7 @@ use crate::error::{AppError, Result};
 use crate::terminal::{Size, Terminal};
 use crate::utils::{
     get_first_non_white_space, get_next_empty_string, get_next_word, get_previous_empty_string,
-    get_word_after_white_space,
+    get_word_after_white_space, go_down, go_to_last_row, go_up, handle_y_move,
 };
 use std::cmp::{self, max};
 use std::collections::HashSet;
@@ -50,7 +50,6 @@ enum CammandModeAction {
     ChangeMode(EditorModes),
 }
 struct PendingOperations {
-    is_pending: bool,
     repeat: usize,
     action: char,
     valid_actions: HashSet<char>,
@@ -72,7 +71,6 @@ impl PendingOperations {
         ];
         let valid_motions: HashSet<char> = keys_motion.iter().cloned().collect();
         Self {
-            is_pending: false,
             repeat: 0,
             action: 0 as char,
             modifier: 0 as char,
@@ -87,18 +85,6 @@ impl PendingOperations {
         self.action = 0 as char;
         self.modifier = 0 as char;
         self.motion = 0 as char;
-    }
-    fn is_valid_action(&self) -> bool {
-        self.valid_actions.contains(&self.action)
-    }
-    fn is_valid_motion(&self) -> bool {
-        self.valid_motions.contains(&self.motion)
-    }
-    fn is_valid_modifier(&self) -> bool {
-        self.valid_modifiers.contains(&self.modifier)
-    }
-    fn is_repeating(&self) -> bool {
-        self.repeat != 0
     }
     fn is_action_given(&self) -> bool {
         self.action != '\0'
@@ -161,22 +147,40 @@ impl Editor {
     fn move_cursor(&mut self, direction: Motion) {
         match direction {
             Motion::Left => self.pos.x = self.pos.x.saturating_sub(1),
-            Motion::PageTop => self.pos.y -= self.terminal.top_screen_pos(),
-            Motion::PageMiddle => self.pos.y -= self.terminal.top_screen_pos(),
-            Motion::PageBottom => self.pos.y -= self.terminal.bottom_screen_pos(),
+            Motion::PageTop => {
+                self.pos = handle_y_move(
+                    &self.buffer,
+                    &self.pos,
+                    self.pos.y.saturating_sub(self.terminal.top_screen_pos()),
+                )
+            }
+            Motion::PageMiddle => {
+                self.pos = handle_y_move(
+                    &self.buffer,
+                    &self.pos,
+                    self.pos.y.saturating_sub(self.terminal.middle_screen_pos()),
+                )
+            }
+            Motion::PageBottom => {
+                self.pos = handle_y_move(
+                    &self.buffer,
+                    &self.pos,
+                    self.pos.y.saturating_sub(self.terminal.bottom_screen_pos()),
+                )
+            }
             Motion::StartOfLine => self.pos.x = 0,
             Motion::GoToLine => self.pos.y = self.pending_operations.repeat.saturating_sub(1),
-            Motion::EndOfRows => self.pos.y = self.buffer.rows.len() - 1,
+            Motion::EndOfRows => self.pos = go_to_last_row(&self.buffer, &self.pos),
             Motion::ParagraphEnd => {
-                self.pos.y = get_previous_empty_string(&self.buffer.rows, self.pos.y)
+                self.pos.y = get_next_empty_string(&self.buffer.rows, self.pos.y)
             }
             Motion::ParagraphStart => {
-                self.pos.y = get_next_empty_string(&self.buffer.rows, self.pos.y)
+                self.pos.y = get_previous_empty_string(&self.buffer.rows, self.pos.y)
             }
             Motion::Word => {
                 let word = get_next_word(self.buffer.rows.get(self.pos.y).unwrap(), self.pos.x);
                 if word == self.buffer.rows.get(self.pos.y).unwrap().len() {
-                    self.pos.y += 1;
+                    self.pos.y = go_down(&self.buffer, &self.pos).y;
                     let line = self.buffer.rows.get(self.pos.y).unwrap();
                     self.pos.x = get_first_non_white_space(line);
                 } else {
@@ -189,7 +193,7 @@ impl Editor {
                     self.pos.x,
                 );
                 if word == self.buffer.rows.get(self.pos.y).unwrap().len() {
-                    self.pos.y += 1;
+                    self.pos.y = go_down(&self.buffer, &self.pos).y;
 
                     let line = self.buffer.rows.get(self.pos.y).unwrap();
                     self.pos.x = get_first_non_white_space(line);
@@ -215,34 +219,8 @@ impl Editor {
                     self.pos.x += 1;
                 }
             }
-            Motion::Up => {
-                let current_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
-                self.pos.y = self.pos.y.saturating_sub(1);
-                let new_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
-                if self.pos.x != 0
-                    && (self.pos.x == current_row_len.saturating_sub(1)
-                        || self.pos.x > new_row_len.saturating_sub(1))
-                {
-                    self.pos.x = new_row_len.saturating_sub(1);
-                } else {
-                    self.pos.x = 0;
-                }
-            }
-            Motion::Down => {
-                let current_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
-                if self.pos.y < self.buffer.rows.len().saturating_sub(1) {
-                    self.pos.y += 1;
-                }
-                let new_row_len = self.buffer.rows.get(self.pos.y).map_or(0, |row| row.len());
-                if self.pos.x != 0
-                    && (self.pos.x == current_row_len.saturating_sub(1)
-                        || self.pos.x > new_row_len.saturating_sub(1))
-                {
-                    self.pos.x = new_row_len.saturating_sub(1);
-                } else {
-                    self.pos.x = 0;
-                }
-            }
+            Motion::Up => self.pos = go_up(&self.buffer, &self.pos),
+            Motion::Down => self.pos = go_down(&self.buffer, &self.pos),
         }
     }
     fn handle_operation(&mut self) {
