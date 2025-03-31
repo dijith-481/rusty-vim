@@ -1,27 +1,31 @@
 use crate::editor::EditorModes;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BufferMotion {
+    Left(usize),
+    Right(usize),
+    Up(usize),
+    Down(usize),
+    EndOfLine(usize),
+    EndOfFile,
+    GoToLine(usize),
+    GoToX(usize),
+    StartOfLine,
+    StartOfNonWhiteSpace,
+    Word(usize),
+    ParagraphEnd(usize),
+    ParagraphStart(usize),
+    WORD(usize),
+}
 pub enum Motion {
-    Left,
-    Right,
-    Up,
-    Down,
-    EndOfLine,
-    EndOfRows,
+    BufferMotion,
     PageTop,
     PageMiddle,
     PageBottom,
-    GoToLine,
-    StartOfLine,
-    StartOfNonWhiteSpace,
-    Word,
-    ParagraphEnd,
-    ParagraphStart,
-    WORD,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NormalAction {
-    Move(Motion),
+    Move(BufferMotion),
     ChangeMode(EditorModes),
     NewLine,
     Delete,

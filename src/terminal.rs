@@ -95,7 +95,7 @@ impl Terminal {
         let cols = parts[1].parse::<usize>()?;
         Ok(Position { x: cols, y: rows })
     }
-    fn render_rows(&self, buffer: &TextBuffer, abuf: &mut String, pos: &Position) {
+    fn render_rows(&self, buffer: &TextBuffer, abuf: &mut String) {
         let camera_y_end = self.camera.y + self.size.y - 2;
         for y in self.camera.y..camera_y_end {
             abuf.push_str("\x1b[K"); //clears from current position to end of line
@@ -110,7 +110,7 @@ impl Terminal {
                 abuf.push_str("~\r\n");
             }
         }
-        self.render_status_line(abuf, pos);
+        self.render_status_line(abuf, &buffer.pos);
         abuf.push_str("\r\n");
         self.render_command_line(abuf);
         // abuf.push_str(&self.status_line_right);
@@ -164,10 +164,10 @@ impl Terminal {
         abuf.push_str("\x1b[?25h");
     }
 
-    pub fn refresh_screen(&mut self, buffer: &TextBuffer, pos: &Position) -> Result<()> {
+    pub fn refresh_screen(&mut self, buffer: &TextBuffer) -> Result<()> {
         let mut abuf = String::new();
-        self.render_cursor_position(pos, &mut abuf);
-        self.render_rows(buffer, &mut abuf, pos);
+        self.render_cursor_position(&buffer.pos, &mut abuf);
+        self.render_rows(buffer, &mut abuf);
         self.update_mouse_pos(&mut abuf);
         write!(io::stdout(), "{}", abuf)?;
         stdout().flush()?;
@@ -230,7 +230,7 @@ impl Terminal {
 impl Drop for Terminal {
     fn drop(&mut self) {
         tcsetattr(io::stdin().as_raw_fd(), TCSAFLUSH, &self.termios).expect("tcsetattr");
-        write!(io::stdout(), "\x1b[?1049l").expect("write");
+        // write!(io::stdout(), "\x1b[?1049l").expect("write");
         stdout().flush().expect("flush");
     }
 }
