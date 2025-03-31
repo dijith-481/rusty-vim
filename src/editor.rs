@@ -59,6 +59,11 @@ impl Editor {
             match self.normal_mode.pending_operations.action {
                 'd' => match self.normal_mode.pending_operations.motion {
                     'd' => self.buffer.delete_row(),
+                    'h' => self.buffer.delete(BufferMotion::Left(repeat)),
+                    '$' => self.buffer.delete(BufferMotion::EndOfLine(repeat)),
+                    'G' => self.buffer.delete(BufferMotion::EndOfFile),
+                    'w' => self.buffer.delete(BufferMotion::Word(repeat)),
+                    'W' => self.buffer.delete(BufferMotion::WORD(repeat)),
                     _ => (),
                 },
                 'g' => match self.normal_mode.pending_operations.motion {
@@ -86,35 +91,35 @@ impl Editor {
                 // 'M' => self.buffer.motion(BufferMotion::PageMiddle(repeat)),
                 // 'L' => self.buffer.motion(BufferMotion::PageBottom(repeat)),
                 'G' => self.buffer.motion(BufferMotion::EndOfFile),
-                'i' => self.normal_action(NormalAction::ChangeMode(EditorModes::Insert)),
+                'i' => self.change_mode(EditorModes::Insert),
                 ':' => {
-                    self.normal_action(NormalAction::ChangeMode(EditorModes::Command));
+                    self.change_mode(EditorModes::Command);
                     self.process_command_mode(self.normal_mode.pending_operations.motion as u8);
-                    // self.terminal.status_line_left = String::from(":");
+                    self.terminal.status_line_left = String::from(":");
                 }
                 'a' => {
-                    if !self.buffer.rows.get(self.buffer.pos.y).unwrap().len() == 0 {
-                        self.buffer.pos.x += 1;
-                    }
-                    self.normal_action(NormalAction::ChangeMode(EditorModes::Insert))
+                    // if !self.buffer.rows.get(self.buffer.pos.y).unwrap().len() == 0 {
+                    //     self.buffer.pos.x += 1;
+                    // }
+                    self.change_mode(EditorModes::Insert);
                 }
                 'A' => {
                     // self.normal_action(NormalAction::Move(BufferMotion::EndOfLine));
                     self.buffer.pos.x += 1;
-                    self.normal_action(NormalAction::ChangeMode(EditorModes::Insert))
+                    self.change_mode(EditorModes::Insert);
                 }
                 'I' => {
                     self.normal_action(NormalAction::Move(BufferMotion::StartOfNonWhiteSpace));
-                    self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
+                    self.change_mode(EditorModes::Insert);
                 }
                 'o' => {
                     self.buffer.pos.y += 1;
                     self.normal_action(NormalAction::NewLine);
-                    self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
+                    self.change_mode(EditorModes::Insert);
                 }
                 'O' => {
                     self.normal_action(NormalAction::NewLine);
-                    self.normal_action(NormalAction::ChangeMode(EditorModes::Insert));
+                    self.change_mode(EditorModes::Insert);
                 }
                 'x' => {
                     self.buffer.delete_char();
@@ -142,6 +147,9 @@ impl Editor {
             self.handle_operation();
         }
         // self.status_line_right = String::new();
+    }
+    fn change_mode(&mut self, mode: EditorModes) {
+        self.mode = mode;
     }
     fn normal_action(&mut self, action: NormalAction) {
         match action {

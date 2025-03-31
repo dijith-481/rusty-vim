@@ -53,7 +53,10 @@ impl PendingOperations {
                 .saturating_add(key.to_digit(10).map_or(0, |digit| digit as usize));
         } else if !self.is_action_given() && self.valid_actions.contains(&key) {
             self.action = key;
-        } else if !self.is_modifier_given() && self.valid_modifiers.contains(&key) {
+        } else if !self.is_modifier_given()
+            && self.is_motion_given()
+            && self.valid_modifiers.contains(&key)
+        {
             self.modifier = key;
         } else if !self.is_motion_given() && self.valid_motions.contains(&key) {
             self.motion = key;
