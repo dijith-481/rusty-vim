@@ -83,6 +83,9 @@ impl TextBuffer {
         }
     }
     fn delete_str(&mut self, start: usize, mut end: usize) {
+        if end < start {
+            return;
+        }
         if end > self.end_of_line() + 1 {
             end = self.end_of_line() + 1;
         }
@@ -91,12 +94,14 @@ impl TextBuffer {
             None => return,
         };
         line.drain(start..end);
+        self.set_x_or(self.end_of_line(), self.pos.x);
     }
     fn delete_lines(&mut self, start: usize, mut end: usize) {
         if end > self.end_of_file() + 1 {
             end = self.end_of_file() + 1;
         }
         self.rows.drain(start..end);
+        self.set_y_or(self.end_of_file(), self.pos.y);
     }
 
     fn move_to_end_of_line(&mut self, repeat: usize) {
@@ -205,9 +210,72 @@ impl TextBuffer {
             self.move_to_line(line);
         }
     }
+    fn delete_word(&mut self, repeat: usize) {
+        let start = self.pos.x;
+        let start_line = self.pos.y;
+        self.move_next_word(repeat);
+        let end = self.pos.x;
+        let end_line = self.pos.y;
+        if start_line == end_line {
+            if start == end {
+                self.delete_str(start, end + 1);
+            }
+            self.delete_str(start, end);
+            self.move_to_x(start);
+            return;
+        }
+        if end == self.first_non_white_space() {
+            self.move_to_line(start_line);
+            if start == 0 || self.get_current_line().unwrap().is_empty() {
+                self.delete_lines(start_line, end_line);
+                self.move_to_x(start);
+            } else {
+                self.delete_str(start, self.end_of_line() + 1);
+                self.delete_lines(start_line + 1, end_line);
+                self.move_to_x(start);
+            }
+            return;
+        }
+        self.move_to_line(start_line);
+        if start == 0 || self.get_current_line().unwrap().is_empty() {
+            self.delete_lines(start_line, end_line);
+            self.move_to_line(start_line + 1);
+            self.delete_str(0, end);
+            let addingline = self.rows.get(end_line).unwrap().clone();
+            self.rows
+                .get_mut(start_line)
+                .unwrap()
+                .push_str(addingline.as_str());
+            self.delete_lines(start_line + 1, start_line + 2);
+        } else {
+            self.delete_str(start, self.end_of_line() + 1);
+            self.delete_lines(start_line + 1, end_line);
+            self.move_to_line(start_line + 1);
+            self.delete_str(0, end);
+            let addingline = self.rows.get(end_line).unwrap().clone();
+            self.rows
+                .get_mut(start_line)
+                .unwrap()
+                .push_str(addingline.as_str());
+            self.delete_lines(start_line + 1, start_line + 2);
+        }
+        return;
+    }
     fn move_next_word(&mut self, repeat: usize) {
         for _ in 0..repeat {
-            let word = self.get_next_word();
+            let mut word = self.get_next_word();
+            if let Some(val) = self
+                .get_current_line()
+                .unwrap()
+                .chars()
+                .nth(self.pos.x + word)
+            {
+                if val.is_whitespace() {
+                    self.move_to_x(word);
+                    word = self.get_next_word();
+                }
+            }
+
             if self.rows[self.pos.y].len() == word {
                 self.move_down(1);
                 self.move_to_x(self.first_non_white_space());
@@ -233,9 +301,12 @@ impl TextBuffer {
             None => return 0,
         };
         if curr_line.is_empty() {
-            return curr_line.len();
+            return 0;
         }
-        let initial_char = curr_line.chars().nth(self.pos.x).unwrap();
+        let initial_char = match curr_line.chars().nth(self.pos.x) {
+            Some(val) => val,
+            None => return 0,
+        };
         let mut initial_type = self.find_char_class(initial_char);
         for (i, c) in curr_line
             .char_indices()
@@ -308,7 +379,7 @@ impl TextBuffer {
             BufferMotion::Right(repeat) => self.delete_right(repeat),
             // BufferMotion::Up(repeat) => self.delete_up(repeat),
             BufferMotion::Down(repeat) => self.delete_down(repeat),
-            // BufferMotion::Word(repeat) => self.delete_word(repeat),
+            BufferMotion::Word(repeat) => self.delete_word(repeat),
             // BufferMotion::WORD(repeat) => self.delete_upto_next_whitespace(repeat),
             // BufferMotion::ParagraphStart(repeat) => self.delete_previous_paragraph(repeat),
             BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
@@ -319,13 +390,13 @@ impl TextBuffer {
             // BufferMotion::GoToLine(line) => self.delete_lines(line),
             BufferMotion::EndOfFile => self.move_to_line(self.end_of_file()),
             BufferMotion::EndOfFile => self.delete_lines(self.pos.y, self.end_of_file() + 1),
-            BufferMotion::Word(repeat) => {
-                let start = self.pos.x;
-                self.move_next_word(1);
-                let end = self.pos.x;
-                self.delete_str(start, end + 1);
-                self.pos.x = start;
-            }
+            // BufferMotion::Word(repeat) => {
+            //     let start = self.pos.x;
+            //     self.move_next_word(1);
+            //     let end = self.pos.x;
+            //     self.delete_str(start, end + 1);
+            //     self.pos.x = start;
+            // }
             BufferMotion::GoToLine(line) => self.move_to_line(line),
             BufferMotion::GoToX(pos) => self.move_to_x(pos),
             BufferMotion::StartOfLine => self.move_to_start_of_line(),
