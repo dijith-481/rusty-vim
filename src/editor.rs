@@ -60,10 +60,16 @@ impl Editor {
                 'd' => match self.normal_mode.pending_operations.motion {
                     'd' => self.buffer.delete_row(),
                     'h' => self.buffer.delete(BufferMotion::Left(repeat)),
+                    'l' => self.buffer.delete(BufferMotion::Right(repeat)),
                     '$' => self.buffer.delete(BufferMotion::EndOfLine(repeat)),
                     'G' => self.buffer.delete(BufferMotion::EndOfFile),
                     'w' => self.buffer.delete(BufferMotion::Word(repeat)),
                     'W' => self.buffer.delete(BufferMotion::WORD(repeat)),
+                    '{' => self.buffer.delete(BufferMotion::ParagraphStart(repeat)),
+                    '}' => self.buffer.delete(BufferMotion::ParagraphEnd(repeat)),
+                    '^' => self.buffer.delete(BufferMotion::StartOfNonWhiteSpace),
+                    'j' => self.buffer.delete(BufferMotion::Down(repeat)),
+                    'k' => self.buffer.delete(BufferMotion::Up(repeat)),
                     _ => (),
                 },
                 'g' => match self.normal_mode.pending_operations.motion {
@@ -127,11 +133,7 @@ impl Editor {
                 _ => self.normal_action(NormalAction::Unknown),
             }
         }
-        // }
         self.normal_mode.pending_operations.reset();
-
-        // write!(io::stdout(), "{}", abuf);
-        // stdout().flush().expect("flush");
     }
 
     fn process_normal_mode(&mut self, c: u8) {

@@ -1,6 +1,5 @@
 pub mod motions;
 pub mod operation_pending;
-// use motions::NormalAction;
 use operation_pending::PendingOperations;
 
 pub struct NormalMode {

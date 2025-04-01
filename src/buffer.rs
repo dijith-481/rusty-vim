@@ -77,16 +77,25 @@ impl TextBuffer {
     }
     fn set_y_or(&mut self, default: usize, y: usize) {
         if self.is_valid_y(y) {
-            self.pos.y = y;
+            self.pos.y = y
         } else {
             self.pos.y = default;
         }
     }
-    fn delete_str(&mut self, start: usize, end: usize) {
-        let line = self.rows.get_mut(self.pos.y).unwrap();
-        line.replace_range(start..end, "");
+    fn delete_str(&mut self, start: usize, mut end: usize) {
+        if end > self.end_of_line() + 1 {
+            end = self.end_of_line() + 1;
+        }
+        let line = match self.rows.get_mut(self.pos.y) {
+            Some(curr_line) => curr_line,
+            None => return,
+        };
+        line.drain(start..end);
     }
-    fn delete_lines(&mut self, start: usize, end: usize) {
+    fn delete_lines(&mut self, start: usize, mut end: usize) {
+        if end > self.end_of_file() + 1 {
+            end = self.end_of_file() + 1;
+        }
         self.rows.drain(start..end);
     }
 
@@ -94,6 +103,17 @@ impl TextBuffer {
         self.move_down(repeat - 1);
         self.move_to_x(self.end_of_line());
         self.x_end = usize::MAX
+    }
+    fn delete_to_end_of_line(&mut self, repeat: usize) {
+        self.delete_str(self.pos.x, self.end_of_line() + 1);
+        self.move_left(1);
+        if self.is_rows_full(self.pos.y) {
+            return;
+        }
+        if repeat > 1 {
+            self.delete_lines(self.pos.y + 1, self.pos.y + repeat);
+        }
+        // self.x_end =
     }
     fn move_to_first_non_white_space(&mut self) {
         self.move_to_x(self.first_non_white_space());
@@ -103,17 +123,24 @@ impl TextBuffer {
         self.pos.x = self.pos.x.saturating_sub(repeat);
         self.x_end = self.pos.x;
     }
+    fn delete_left(&mut self, repeat: usize) {
+        let new_x = self.pos.x.saturating_sub(repeat);
+        self.delete_str(new_x, self.pos.x);
+        self.x_end = new_x;
+    }
+    fn delete_right(&mut self, repeat: usize) {
+        let new_x = self.pos.x + repeat;
+        self.delete_str(self.pos.x, new_x);
+        self.set_x_or(self.end_of_line(), self.pos.x);
+        self.x_end = self.pos.x;
+    }
     fn move_to_start_of_line(&mut self) {
         self.pos.x = 0;
         self.x_end = 0;
     }
     fn move_right(&mut self, repeat: usize) {
         self.move_to_x(self.pos.x + repeat);
-        if self.pos.x == self.end_of_line() {
-            self.x_end = usize::MAX
-        } else {
-            self.x_end = self.pos.x;
-        }
+        self.x_end = self.pos.x;
     }
     fn end_of_line(&self) -> usize {
         self.get_current_line()
@@ -143,6 +170,9 @@ impl TextBuffer {
     fn move_down(&mut self, repeat: usize) {
         self.set_y_or(self.end_of_file(), self.pos.y + repeat);
         self.set_x_or(self.end_of_line(), self.x_end);
+    }
+    fn delete_down(&mut self, repeat: usize) {
+        self.delete_lines(self.pos.y, self.pos.y + repeat + 1);
     }
     fn get_next_empty_string(&self) -> usize {
         self.rows
@@ -256,42 +286,39 @@ impl TextBuffer {
     pub fn motion(&mut self, direction: BufferMotion) {
         match direction {
             BufferMotion::Left(repeat) => self.move_left(repeat),
-            BufferMotion::GoToLine(line) => self.move_to_line(line),
-            BufferMotion::GoToX(pos) => self.move_to_x(pos),
-            BufferMotion::EndOfFile => self.move_to_line(self.end_of_file()),
-            BufferMotion::StartOfLine => self.move_to_start_of_line(),
-            BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
-            BufferMotion::ParagraphStart(repeat) => self.move_previous_paragraph(repeat),
-            BufferMotion::Word(repeat) => self.move_next_word(repeat),
-            BufferMotion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
-            BufferMotion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
-            BufferMotion::EndOfLine(repeat) => {
-                self.move_to_end_of_line(repeat);
-            }
             BufferMotion::Right(repeat) => self.move_right(repeat),
             BufferMotion::Up(repeat) => self.move_up(repeat),
             BufferMotion::Down(repeat) => self.move_down(repeat),
-            _ => (),
+            BufferMotion::Word(repeat) => self.move_next_word(repeat),
+            BufferMotion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
+            BufferMotion::ParagraphStart(repeat) => self.move_previous_paragraph(repeat),
+            BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
+            BufferMotion::StartOfLine => self.move_to_start_of_line(),
+            BufferMotion::EndOfLine(repeat) => self.move_to_end_of_line(repeat),
+            BufferMotion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
+            BufferMotion::GoToX(pos) => self.move_to_x(pos),
+            BufferMotion::GoToLine(line) => self.move_to_line(line),
+            BufferMotion::EndOfFile => self.move_to_line(self.end_of_file()),
         }
     }
+
     pub fn delete(&mut self, direction: BufferMotion) {
         match direction {
-            BufferMotion::Left(repeat) => {
-                let end = self.pos.x;
-                self.move_left(repeat);
-                let start = self.pos.x;
-                self.delete_str(start, end);
-            }
-            BufferMotion::EndOfLine(repeat) => {
-                let start = self.pos.x;
-                let end = self.end_of_line() + 1;
-                self.delete_str(start, end);
-            }
-            BufferMotion::EndOfFile => {
-                let start = self.pos.y;
-                let end = self.end_of_file();
-                self.delete_lines(start, end + 1);
-            }
+            BufferMotion::Left(repeat) => self.delete_left(repeat),
+            BufferMotion::Right(repeat) => self.delete_right(repeat),
+            // BufferMotion::Up(repeat) => self.delete_up(repeat),
+            BufferMotion::Down(repeat) => self.delete_down(repeat),
+            // BufferMotion::Word(repeat) => self.delete_word(repeat),
+            // BufferMotion::WORD(repeat) => self.delete_upto_next_whitespace(repeat),
+            // BufferMotion::ParagraphStart(repeat) => self.delete_previous_paragraph(repeat),
+            BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
+            BufferMotion::StartOfLine => self.move_to_start_of_line(),
+            BufferMotion::EndOfLine(repeat) => self.delete_to_end_of_line(repeat),
+            BufferMotion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
+            // BufferMotion::GoToX(pos) => self.move_to_x(pos),
+            // BufferMotion::GoToLine(line) => self.delete_lines(line),
+            BufferMotion::EndOfFile => self.move_to_line(self.end_of_file()),
+            BufferMotion::EndOfFile => self.delete_lines(self.pos.y, self.end_of_file() + 1),
             BufferMotion::Word(repeat) => {
                 let start = self.pos.x;
                 self.move_next_word(1);
@@ -299,7 +326,6 @@ impl TextBuffer {
                 self.delete_str(start, end + 1);
                 self.pos.x = start;
             }
-            BufferMotion::Word(repeat) => self.move_next_word(repeat),
             BufferMotion::GoToLine(line) => self.move_to_line(line),
             BufferMotion::GoToX(pos) => self.move_to_x(pos),
             BufferMotion::StartOfLine => self.move_to_start_of_line(),
@@ -309,9 +335,6 @@ impl TextBuffer {
             BufferMotion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
             BufferMotion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
             BufferMotion::EndOfLine(repeat) => self.move_to_end_of_line(repeat),
-            BufferMotion::Right(repeat) => self.move_right(repeat),
-            BufferMotion::Up(repeat) => self.move_up(repeat),
-            BufferMotion::Down(repeat) => self.move_down(repeat),
             _ => (),
         }
     }

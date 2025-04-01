@@ -1,6 +1,5 @@
 use crate::error::{AppError, FileError, Result};
 use std::{
-    env::{self},
     fs::File,
     io::{self, BufRead, BufReader, Lines, Write},
     path::Path,

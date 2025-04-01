@@ -1,4 +1,3 @@
-use crate::error::Result;
 pub struct CommandMode {
     pub command: String,
 }
