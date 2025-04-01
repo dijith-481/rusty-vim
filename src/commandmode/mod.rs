@@ -3,6 +3,7 @@ pub struct CommandMode {
 }
 pub enum CommandReturn {
     Escape,
+    SaveQuit,
     Quit,
     Save,
     None,
@@ -15,7 +16,6 @@ impl CommandMode {
     pub fn handle_key(&mut self, c: u8) -> CommandReturn {
         if c == b'\x1b' {
             self.command = String::new();
-            // EditorModes::Normal;
             return CommandReturn::Escape;
         }
         if c == b':' {
@@ -37,48 +37,22 @@ impl CommandMode {
         CommandReturn::None
     }
     fn execute(&mut self) -> CommandReturn {
-        // self.command = String::from("hello");
         match self.command.as_str() {
             "w" => self.save_file(),
 
             "q" => {
                 self.command = String::from("quit");
-                // CommandReturn::Quit
                 self.quit()
+            }
+            "wq" => {
+                self.command = String::from("save_quit");
+                CommandReturn::SaveQuit
             }
             _ => {
                 self.command = String::from("Invalid Command!");
                 CommandReturn::Escape
             }
         }
-        // h// if self
-        //     .terminal
-        //     .status_line_left
-        //     .as_str()
-        //     .starts_with("enter a filename: ")
-        // {
-        //     self.buffer.filename.push_str(
-        //         &(self
-        //             .terminal
-        //             .status_line_left
-        //             .strip_prefix("enter a filename: ")
-        //             .unwrap()),
-        //     );
-        // self.save_file()?;
-        // } else {
-        // match self.terminal.status_line_left.as_str() {
-        //     ":w" => self.save_file()?,
-        //     ":q" => self.exit_flag = true,
-        //     ":wq" => {
-        //         self.save_file()?;
-        //         if self.mode == EditorModes::Normal {
-        //             self.exit_flag = true;
-        //         }
-        //     }
-        //     _ => self.terminal.status_line_left = String::from("!not a valid command."),
-        // }
-        // }
-        // CommandReturn::None
     }
     fn quit(&self) -> CommandReturn {
         CommandReturn::Quit

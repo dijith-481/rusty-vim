@@ -477,6 +477,12 @@ impl TextBuffer {
         self.rows.insert(self.pos.y, String::new());
         self.pos.x = 0;
     }
+    pub fn fix_cursor_pos_escpae_insert(&mut self) {
+        self.set_x_or(self.end_of_line(), self.pos.x);
+    }
+    pub fn write_buffer_file(&self) {
+        write_file_to_disk(&self.filename, &self.rows);
+    }
 }
 fn is_line_full(line: &String, end: usize) -> bool {
     line.len() <= end

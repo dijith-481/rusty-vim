@@ -3,8 +3,8 @@ use crate::commandmode::{CommandMode, CommandReturn};
 use crate::error::Result;
 
 use crate::normalmode::NormalMode;
-use crate::normalmode::motions::BufferMotion;
 use crate::normalmode::motions::NormalAction;
+use crate::normalmode::motions::{BufferMotion, Motion};
 use crate::terminal::Terminal;
 use std::cmp::{self, max};
 
@@ -141,14 +141,10 @@ impl Editor {
             return;
         }
         self.normal_mode.pending_operations.insert_key(c as char);
-        println!("self ");
-
         let action_given = self.normal_mode.pending_operations.is_motion_given();
         if action_given {
-            println!("given ");
             self.handle_operation();
         }
-        // self.status_line_right = String::new();
     }
     fn change_mode(&mut self, mode: EditorModes) {
         self.mode = mode;
@@ -168,29 +164,16 @@ impl Editor {
 
     fn process_insert_mode(&mut self, c: u8) {
         if c == b'\x1b' {
-            if self.buffer.pos.x >= self.buffer.rows[self.buffer.pos.y].len() {
-                self.buffer.pos.x =
-                    cmp::max(self.buffer.rows.get(self.buffer.pos.y).unwrap().len(), 0) - 1;
-            } else if self.buffer.pos.x > 0 {
-                self.buffer.pos.x = self.buffer.pos.x.saturating_sub(1);
-            }
-
+            self.buffer.fix_cursor_pos_escpae_insert();
             self.terminal.change_cursor(EditorModes::Normal);
             self.mode = EditorModes::Normal;
             return;
         } else if c == 127 {
-            if self.buffer.pos.x == 0 && self.buffer.pos.y > 0 {
-                let content = self.buffer.rows.remove(self.buffer.pos.y);
-                self.buffer.rows[self.buffer.pos.y - 1].push_str(&content);
-                self.buffer.pos.y -= 1;
-                self.buffer.pos.x = self.buffer.rows[self.buffer.pos.y].len() - 1;
-            } else {
-                self.normal_action(NormalAction::Delete);
-                self.buffer.pos.x -= 1;
-            }
+            self.buffer.delete(BufferMotion::Left(1));
+            self.buffer.motion(BufferMotion::Left(1));
         } else if c == 13 {
-            self.buffer.pos.y += 1;
-            self.normal_action(NormalAction::NewLine);
+            // self.buffer.pos.y += 1;
+            // self.normal_action(NormalAction::NewLine);
         } else if !((c) < 32) {
             self.buffer.insert_char(c);
         }
@@ -203,6 +186,12 @@ impl Editor {
                 self.terminal.status_line_right = String::from("None");
             }
             CommandReturn::Save => {
+                self.buffer.write_buffer_file();
+                self.terminal.status_line_right = String::from("Save");
+            }
+            CommandReturn::SaveQuit => {
+                self.buffer.write_buffer_file();
+                self.exit_flag = true;
                 self.terminal.status_line_right = String::from("Save");
             }
             CommandReturn::Escape => {
@@ -218,7 +207,6 @@ impl Editor {
         self.terminal
             .command_line
             .push_str(&self.command_mode.command);
-        // }
     }
     fn process_keypress(&mut self) -> Result<()> {
         let c = self.terminal.read_key()?;
@@ -242,3 +230,4 @@ impl Editor {
 impl Drop for Editor {
     fn drop(&mut self) {}
 }
+
