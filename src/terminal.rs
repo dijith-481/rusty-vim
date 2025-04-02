@@ -103,41 +103,41 @@ impl Terminal {
         abuf.push_str("\r\n");
         abuf.push_str("\r\n");
         abuf.push_str(
-            "\x1b[K     ██████╗░██╗░░░██╗░██████╗████████╗██╗░░░██╗  ██╗░░░██╗██╗███╗░░░███╗\r\n",
+            "\x1b[K     ██████╗ ██╗   ██╗ ██████╗████████╗██╗   ██╗   ██╗   ██╗██╗███╗   ███╗\r\n",
         );
         abuf.push_str(
-            "\x1b[K     ██╔══██╗██║░░░██║██╔════╝╚══██╔══╝╚██╗░██╔╝  ██║░░░██║██║████╗░████║\r\n",
+            "\x1b[K     ██╔══██╗██║   ██║██╔════╝╚══██╔══╝╚██╗ ██╔╝   ██║   ██║██║████╗ ████║\r\n",
         );
         abuf.push_str(
-            "\x1b[K     ██████╔╝██║░░░██║╚█████╗░░░░██║░░░░╚████╔╝░  ╚██╗░██╔╝██║██╔████╔██║\r\n",
+            "\x1b[K     ██████╔╝██║   ██║╚█████╗    ██║    ╚████╔╝    ╚██╗ ██╔╝██║██╔████╔██║\r\n",
         );
         abuf.push_str(
-            "\x1b[K     ██╔══██╗██║░░░██║░╚═══██╗░░░██║░░░░░╚██╔╝░░  ░╚████╔╝░██║██║╚██╔╝██║\r\n",
+            "\x1b[K     ██╔══██╗██║   ██║ ╚═══██╗   ██║     ╚██╔╝      ╚████╔╝ ██║██║╚██╔╝██║\r\n",
         );
         abuf.push_str(
-            "\x1b[K     ██║░░██║╚██████╔╝██████╔╝░░░██║░░░░░░██║░░░  ░░╚██╔╝░░██║██║░╚═╝░██║\r\n",
+            "\x1b[K     ██║  ██║╚██████╔╝██████╔╝   ██║      ██║        ╚██╔╝  ██║██║ ╚═╝ ██║\r\n",
         );
         abuf.push_str(
-            "\x1b[K     ╚═╝░░╚═╝░╚═════╝░╚═════╝░░░░╚═╝░░░░░░╚═╝░░░  ░░░╚═╝░░░╚═╝╚═╝░░░░░╚═╝\r\n",
+            "\x1b[K     ╚═╝  ╚═╝ ╚═════╝ ╚═════╝    ╚═╝      ╚═╝         ╚═╝   ╚═╝╚═╝     ╚═╝\r\n",
         );
         abuf.push_str("\r\n");
         // abuf.push_str("]x1b[K                 Rusty-VIM               \r\n");
         abuf.push_str(
-            "\x1b[K               Implementation of Vim-like text-editor in rust            \r\n",
+            "\x1b[K                Implementation of Vim-like text-editor in rust            \r\n",
         );
         abuf.push_str(
-            "\x1b[K                             version 0.0.1                               \r\n",
+            "\x1b[K                              version 0.0.1                               \r\n",
         );
 
         abuf.push_str(
-            "\x1b[K                            By Dijith Dinesh                             \r\n",
+            "\x1b[K                             By Dijith Dinesh                             \r\n",
         );
         abuf.push_str("\r\n");
         abuf.push_str(
-            "\x1b[K                  type  :q<Enter>       to exit                          \r\n",
+            "\x1b[K                   type  :q<Enter>       to exit                          \r\n",
         );
         abuf.push_str(
-            "\x1b[K                  type  i               to enter insert mode             \r\n",
+            "\x1b[K                   type  i               to enter insert mode             \r\n",
         );
     }
     fn render_rows(&mut self, buffer: &TextBuffer, abuf: &mut String) {
