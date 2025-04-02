@@ -1,11 +1,12 @@
 pub struct CommandMode {
     pub command: String,
 }
-pub enum CommandReturn {
+pub enum CommandReturn<'a> {
     Escape,
     SaveQuit,
     Quit,
     Save,
+    FileName(&'a String),
     None,
 }
 impl CommandMode {
@@ -13,7 +14,7 @@ impl CommandMode {
         let command = String::new();
         Self { command }
     }
-    pub fn handle_key(&mut self, c: u8) -> CommandReturn {
+    pub fn handle_key(&mut self, c: u8, save: bool) -> CommandReturn {
         if c == b'\x1b' {
             self.command = String::new();
             return CommandReturn::Escape;
@@ -23,6 +24,9 @@ impl CommandMode {
             return CommandReturn::None;
         }
         if c == 13 {
+            if save {
+                return CommandReturn::FileName(&self.command);
+            }
             //enter key
             return self.execute();
         }
@@ -45,7 +49,7 @@ impl CommandMode {
                 self.quit()
             }
             "wq" => {
-                self.command = String::from("save_quit");
+                // self.command = String::from("save_quit");
                 CommandReturn::SaveQuit
             }
             _ => {

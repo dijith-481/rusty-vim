@@ -557,8 +557,8 @@ impl TextBuffer {
     pub fn fix_cursor_pos_escape_insert(&mut self) {
         self.set_x_or(self.end_of_line(), self.pos.x);
     }
-    pub fn write_buffer_file(&self) {
-        write_file_to_disk(&self.filename, &self.rows);
+    pub fn write_buffer_file(&self) -> Result<()> {
+        write_file_to_disk(&self.filename, &self.rows)
     }
 }
 fn is_line_full(line: &String, end: usize) -> bool {

@@ -18,6 +18,7 @@ pub struct Editor {
     terminal: Terminal,
     buffer: TextBuffer,
     pub exit_flag: bool,
+    save_flag: bool,
     pub mode: EditorModes,
     normal_mode: NormalMode,
     command_mode: CommandMode,
@@ -35,6 +36,7 @@ impl Editor {
             terminal,
             buffer,
             exit_flag: false,
+            save_flag: false,
             mode: EditorModes::Normal,
         })
     }
@@ -188,8 +190,13 @@ impl Editor {
         }
     }
     fn process_command_mode(&mut self, c: u8) {
-        let value = self.command_mode.handle_key(c);
+        let value = self.command_mode.handle_key(c, self.save_flag);
         match value {
+            CommandReturn::FileName(filename) => {
+                self.buffer.filename = filename.to_string();
+                self.buffer.write_buffer_file();
+                self.exit_flag = true;
+            }
             CommandReturn::Quit => self.exit_flag = true,
             CommandReturn::None => {
                 self.terminal.status_line_right = String::from("None");
@@ -199,9 +206,15 @@ impl Editor {
                 self.terminal.status_line_right = String::from("Save");
             }
             CommandReturn::SaveQuit => {
-                self.buffer.write_buffer_file();
-                self.exit_flag = true;
-                self.terminal.status_line_right = String::from("Save");
+                match self.buffer.write_buffer_file() {
+                    Ok(_) => self.save_flag = false,
+                    Err(_) => self.save_flag = true,
+                }
+                if !self.save_flag {
+                    self.exit_flag = true;
+                }
+                self.command_mode.command = String::new();
+                self.terminal.status_line_right = String::from("enter file name:");
             }
             CommandReturn::Escape => {
                 self.mode = EditorModes::Normal;
@@ -209,7 +222,11 @@ impl Editor {
             }
         }
         if self.mode == EditorModes::Command {
-            self.terminal.command_line = String::from(":");
+            if self.save_flag {
+                self.terminal.command_line = String::from("enter file name: ");
+            } else {
+                self.terminal.command_line = String::from(":");
+            }
         } else {
             self.terminal.command_line = String::new();
         }

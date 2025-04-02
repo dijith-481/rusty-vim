@@ -143,6 +143,10 @@ impl Terminal {
     fn render_rows(&mut self, buffer: &TextBuffer, abuf: &mut String) {
         if self.is_start_first_time && buffer.rows.is_empty() {
             self.render_start_page(abuf);
+            abuf.push_str("\x1b[999B");
+            self.render_command_line(abuf);
+            abuf.push_str("\r\x1b[A");
+            self.render_status_line(abuf, &buffer.pos);
             return;
         }
         self.is_start_first_time = false;
