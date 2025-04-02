@@ -4,7 +4,7 @@ use crate::{
     normalmode::motions::BufferMotion,
     terminal::Position,
 };
-use std::{env, usize};
+use std::usize;
 pub struct TextBuffer {
     pub filename: String,
     pub rows: Vec<String>,
@@ -19,8 +19,7 @@ pub enum CharClass {
 }
 
 impl TextBuffer {
-    pub fn new() -> Result<Self> {
-        let args: Vec<String> = env::args().collect();
+    pub fn new(args: Vec<String>) -> Result<Self> {
         let rows: Vec<String>;
         let pos = Position::new();
         let filename: String;
@@ -48,6 +47,7 @@ impl TextBuffer {
         if self.rows.is_empty() {
             let row = String::from(c as char);
             self.rows.push(row);
+            self.pos.x += 1;
             return;
         }
         if let Some(row) = self.rows.get_mut(self.pos.y) {
@@ -65,7 +65,7 @@ impl TextBuffer {
         if self.is_valid_y(self.pos.y) {
             return x < self.rows[self.pos.y].len();
         }
-        x < self.rows[self.rows.len().saturating_sub(1)].len()
+        x < self.rows.last().map_or(0, |row| row.len())
     }
     fn set_x_or(&mut self, default: usize, x: usize) {
         if self.is_valid_x(x) {
@@ -80,6 +80,28 @@ impl TextBuffer {
         } else {
             self.pos.y = default;
         }
+    }
+    pub fn split_line(&mut self) {
+        if let Some(line) = self.rows.get_mut(self.pos.y) {
+            let split_string = line.get(self.pos.x..).map(|s| s.to_string());
+            if let Some(split_string) = split_string {
+                let len = line.len();
+                line.drain(self.pos.x..len);
+                if self.pos.y < self.end_of_file() {
+                    let whitespace = self.first_non_white_space();
+                    self.pos.x = whitespace;
+                    let mut new_split_string = String::new();
+                    for _ in 0..whitespace {
+                        new_split_string.push(' ');
+                    }
+                    new_split_string.push_str(&split_string);
+                    self.pos.y += 1;
+                    self.rows.insert(self.pos.y, new_split_string);
+                } else {
+                    self.rows.insert(self.pos.y + 1, split_string);
+                }
+            }
+        };
     }
     fn delete_str(&mut self, start: usize, mut end: usize) {
         if end < start {

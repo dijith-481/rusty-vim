@@ -1,11 +1,13 @@
 use crate::buffer::TextBuffer;
 use crate::commandmode::{CommandMode, CommandReturn};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::normalmode::NormalMode;
 use crate::normalmode::motions::NormalAction;
 use crate::normalmode::motions::{BufferMotion, Motion};
 use crate::terminal::Terminal;
-use std::cmp::{self, max};#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use std::cmp::{self, max};
+use std::env;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorModes {
     Normal,
     Insert,
@@ -23,7 +25,9 @@ pub struct Editor {
 
 impl Editor {
     pub fn new() -> Result<Self> {
-        let buffer = TextBuffer::new()?;
+        let args: Vec<String> = env::args().collect();
+        let buffer = TextBuffer::new(args)?;
+
         let terminal = Terminal::new(buffer.rows.len(), &buffer.filename)?;
         Ok(Self {
             normal_mode: NormalMode::new(),
@@ -176,6 +180,7 @@ impl Editor {
             // self.buffer.delete(BufferMotion::Left(1));
             // self.buffer.motion(BufferMotion::Left(1));
         } else if c == 13 {
+            self.buffer.split_line();
             // self.buffer.pos.y += 1;
             // self.normal_action(NormalAction::NewLine);
         } else if !((c) < 32) {
