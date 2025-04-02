@@ -59,7 +59,7 @@ impl Editor {
                 String::from(self.normal_mode.pending_operations.action);
             match self.normal_mode.pending_operations.action {
                 'd' => match self.normal_mode.pending_operations.motion {
-                    'd' => self.buffer.delete_row(),
+                    'd' => self.buffer.delete(BufferMotion::Down(0)),
                     'h' => self.buffer.delete(BufferMotion::Left(repeat)),
                     'l' => self.buffer.delete(BufferMotion::Right(repeat)),
                     '$' => self.buffer.delete(BufferMotion::EndOfLine(repeat)),
@@ -122,8 +122,8 @@ impl Editor {
                     self.change_mode(EditorModes::Insert);
                 }
                 'o' => {
-                    self.buffer.pos.y += 1;
-                    self.normal_action(NormalAction::NewLine);
+                    self.buffer.pos.y += repeat;
+                    self.buffer.rows.insert(self.buffer.pos.y, String::new());
                     self.change_mode(EditorModes::Insert);
                 }
                 'O' => {

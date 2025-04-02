@@ -82,6 +82,18 @@ impl TextBuffer {
         }
     }
     pub fn split_line(&mut self) {
+        if self.rows.is_empty() {
+            self.rows.push(String::new());
+            self.pos.y += 1;
+            self.rows.push(String::new());
+            return;
+        }
+        if self.pos.x > self.end_of_line() {
+            self.pos.y += 1;
+            self.rows.insert(self.pos.y, String::new());
+            self.pos.x = 0;
+            return;
+        }
         if let Some(line) = self.rows.get_mut(self.pos.y) {
             let split_string = line.get(self.pos.x..).map(|s| s.to_string());
             if let Some(split_string) = split_string {
@@ -98,7 +110,8 @@ impl TextBuffer {
                     self.pos.y += 1;
                     self.rows.insert(self.pos.y, new_split_string);
                 } else {
-                    self.rows.insert(self.pos.y + 1, split_string);
+                    self.pos.y += 1;
+                    self.rows.insert(self.pos.y, split_string);
                 }
             }
         };
@@ -123,6 +136,7 @@ impl TextBuffer {
         }
         self.rows.drain(start..end);
         self.set_y_or(self.end_of_file(), self.pos.y);
+        self.set_x_or(0, self.pos.x);
     }
 
     fn move_to_end_of_line(&mut self, repeat: usize) {
@@ -243,6 +257,9 @@ impl TextBuffer {
         self.set_x_or(self.end_of_line(), self.x_end);
     }
     fn delete_down(&mut self, repeat: usize) {
+        if self.pos.y + repeat >= self.rows.len() {
+            return;
+        }
         self.delete_lines(self.pos.y, self.pos.y + repeat + 1);
     }
     fn get_next_empty_string(&self) -> usize {
@@ -518,15 +535,7 @@ impl TextBuffer {
     //     pos.x -= 1;
     //     self.delete_char(pos);
     // }
-    pub fn delete_row(&mut self) {
-        if self.rows.is_empty() || self.is_rows_full(self.pos.y) {
-            return;
-        };
-        self.rows.remove(self.pos.y);
-        if self.is_rows_full(self.pos.y) {
-            self.pos.y = self.pos.y.saturating_sub(1);
-        }
-    }
+
     fn is_rows_full(&self, end: usize) -> bool {
         self.rows.len() <= end
     }

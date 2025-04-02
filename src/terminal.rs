@@ -20,14 +20,15 @@ impl Position {
 }
 pub struct Terminal {
     termios: Termios,
-    line_no_digits: usize,
     pub size: Position,
     pub camera: Position,
     pub cursor: Position,
+    line_no_digits: usize,
     pub status_line_left: String,
     pub command_line: String,
     pub status_line_right: String,
     cursor_type: CursorType,
+    is_start_first_time: bool,
 }
 enum CursorType {
     Ibeam,
@@ -36,11 +37,12 @@ enum CursorType {
 
 impl Terminal {
     pub fn new(buffer_len: usize, filename: &str) -> Result<Self> {
-        let line_no_digits = buffer_len.checked_ilog10().unwrap_or_else(|| 0) as usize + 1;
+        let line_no_digits = Self::get_line_no_padding(buffer_len);
         let fd = io::stdin().as_raw_fd();
         let mut terminal = Self {
-            command_line: String::new(),
             line_no_digits,
+            command_line: String::new(),
+            is_start_first_time: true,
             termios: Termios::from_fd(fd)?,
             size: Position { x: 0, y: 0 },
             camera: Position { x: 0, y: 0 },
@@ -121,15 +123,16 @@ impl Terminal {
         abuf.push_str("\r\n");
         // abuf.push_str("]x1b[K                 Rusty-VIM               \r\n");
         abuf.push_str(
-            "\x1b[K                  Implementation of Vim like editor in rust              \r\n",
+            "\x1b[K               Implementation of Vim-like text-editor in rust            \r\n",
         );
         abuf.push_str(
-            "\x1b[K                        version 0.0.1 (pre alpha)                        \r\n",
+            "\x1b[K                             version 0.0.1                               \r\n",
         );
 
         abuf.push_str(
             "\x1b[K                            By Dijith Dinesh                             \r\n",
         );
+        abuf.push_str("\r\n");
         abuf.push_str(
             "\x1b[K                  type  :q<Enter>       to exit                          \r\n",
         );
@@ -137,16 +140,19 @@ impl Terminal {
             "\x1b[K                  type  i               to enter insert mode             \r\n",
         );
     }
-    fn render_rows(&self, buffer: &TextBuffer, abuf: &mut String) {
-        if buffer.rows.is_empty() {
+    fn render_rows(&mut self, buffer: &TextBuffer, abuf: &mut String) {
+        if self.is_start_first_time && buffer.rows.is_empty() {
             self.render_start_page(abuf);
             return;
         }
+        self.is_start_first_time = false;
+        self.line_no_digits = Self::get_line_no_padding(buffer.rows.len());
+
         let camera_y_end = self.camera.y + self.size.y - 2;
         for y in self.camera.y..camera_y_end {
             abuf.push_str("\x1b[K"); //clears from current position to end of line
             if let Some(line) = buffer.rows.get(y as usize) {
-                abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits));
+                abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits,));
                 abuf.push_str(line);
                 abuf.push_str("\r\n");
             } else {
@@ -268,6 +274,9 @@ impl Terminal {
             }
             _ => self.cursor_type = CursorType::Block,
         }
+    }
+    fn get_line_no_padding(buffer_len: usize) -> usize {
+        buffer_len.checked_ilog10().unwrap_or_else(|| 0) as usize + 1
     }
 }
 impl Drop for Terminal {
