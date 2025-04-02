@@ -9,6 +9,7 @@ pub enum BufferMotion {
     EndOfLine(usize),
     EndOfFile,
     GoToLine(usize),
+    BackSpace(usize),
     GoToX(usize),
     StartOfLine,
     StartOfNonWhiteSpace,

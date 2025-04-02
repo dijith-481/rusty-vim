@@ -1,14 +1,11 @@
 use crate::buffer::TextBuffer;
 use crate::commandmode::{CommandMode, CommandReturn};
 use crate::error::Result;
-
 use crate::normalmode::NormalMode;
 use crate::normalmode::motions::NormalAction;
 use crate::normalmode::motions::{BufferMotion, Motion};
 use crate::terminal::Terminal;
-use std::cmp::{self, max};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use std::cmp::{self, max};#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorModes {
     Normal,
     Insert,
@@ -70,6 +67,7 @@ impl Editor {
                     '^' => self.buffer.delete(BufferMotion::StartOfNonWhiteSpace),
                     'j' => self.buffer.delete(BufferMotion::Down(repeat)),
                     'k' => self.buffer.delete(BufferMotion::Up(repeat)),
+                    '\x7F' => self.buffer.delete(BufferMotion::BackSpace(repeat)),
                     _ => (),
                 },
                 'g' => match self.normal_mode.pending_operations.motion {
@@ -89,6 +87,7 @@ impl Editor {
                 '$' => self.buffer.motion(BufferMotion::EndOfLine(repeat)),
                 '0' => self.buffer.motion(BufferMotion::StartOfLine),
                 '^' => self.buffer.motion(BufferMotion::StartOfNonWhiteSpace),
+                '\x7F' => self.buffer.motion(BufferMotion::BackSpace(repeat)),
                 'w' => self.buffer.motion(BufferMotion::Word(repeat)),
                 'W' => self.buffer.motion(BufferMotion::WORD(repeat)),
                 // 'H' => self.buffer.motion(BufferMotion::PageTop(repeat)),
@@ -162,15 +161,20 @@ impl Editor {
         }
     }
 
+    fn activate_normal_mode(&mut self) {
+        self.buffer.fix_cursor_pos_escape_insert();
+        self.terminal.change_cursor(EditorModes::Normal);
+        self.mode = EditorModes::Normal;
+    }
+
     fn process_insert_mode(&mut self, c: u8) {
         if c == b'\x1b' {
-            self.buffer.fix_cursor_pos_escpae_insert();
-            self.terminal.change_cursor(EditorModes::Normal);
-            self.mode = EditorModes::Normal;
+            self.activate_normal_mode();
             return;
         } else if c == 127 {
-            self.buffer.delete(BufferMotion::Left(1));
-            self.buffer.motion(BufferMotion::Left(1));
+            self.buffer.delete(BufferMotion::BackSpace(1));
+            // self.buffer.delete(BufferMotion::Left(1));
+            // self.buffer.motion(BufferMotion::Left(1));
         } else if c == 13 {
             // self.buffer.pos.y += 1;
             // self.normal_action(NormalAction::NewLine);
@@ -230,4 +234,3 @@ impl Editor {
 impl Drop for Editor {
     fn drop(&mut self) {}
 }
-

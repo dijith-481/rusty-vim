@@ -5,7 +5,6 @@ use crate::{
     terminal::Position,
 };
 use std::{env, usize};
-
 pub struct TextBuffer {
     pub filename: String,
     pub rows: Vec<String>,
@@ -132,6 +131,51 @@ impl TextBuffer {
         let new_x = self.pos.x.saturating_sub(repeat);
         self.delete_str(new_x, self.pos.x);
         self.x_end = new_x;
+    }
+    fn append_line_to_prev_line(&mut self) {
+        if !self.is_valid_y(self.pos.y) || !self.is_valid_y(self.pos.y.saturating_sub(1)) {
+            return;
+        }
+        let addingline = self.rows.get(self.pos.y).unwrap().clone();
+        self.rows
+            .get_mut(self.pos.y.saturating_sub(1))
+            .unwrap()
+            .push_str(addingline.as_str());
+        self.delete_lines(self.pos.y, self.pos.y + 1);
+    }
+    fn delete_backspace(&mut self, repeat: usize) {
+        if self.pos.x == 0 {
+            if self.pos.y == 0 {
+                return;
+            }
+            self.pos.y = self.pos.y.saturating_sub(1);
+            let new_x = if self.end_of_line() == 0 {
+                0
+            } else {
+                self.end_of_line() + 1
+            };
+            self.pos.y += 1;
+            self.append_line_to_prev_line();
+            self.pos.y = self.pos.y.saturating_sub(1);
+            self.pos.x = new_x;
+            return;
+        }
+        let new_x = self.pos.x.saturating_sub(repeat);
+        self.delete_str(new_x, self.pos.x);
+        self.pos.x = new_x;
+        self.x_end = new_x;
+    }
+    fn move_backspace(&mut self, repeat: usize) {
+        if self.pos.x == 0 {
+            if self.pos.y == 0 {
+                return;
+            }
+            self.pos.y = self.pos.y.saturating_sub(1);
+            self.pos.x = self.end_of_line();
+            return;
+        }
+        self.pos.x = self.pos.x.saturating_sub(repeat);
+        self.x_end = self.pos.x;
     }
     fn delete_right(&mut self, repeat: usize) {
         let new_x = self.pos.x + repeat;
@@ -360,6 +404,7 @@ impl TextBuffer {
             BufferMotion::Right(repeat) => self.move_right(repeat),
             BufferMotion::Up(repeat) => self.move_up(repeat),
             BufferMotion::Down(repeat) => self.move_down(repeat),
+            BufferMotion::BackSpace(repeat) => self.move_backspace(repeat),
             BufferMotion::Word(repeat) => self.move_next_word(repeat),
             BufferMotion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
             BufferMotion::ParagraphStart(repeat) => self.move_previous_paragraph(repeat),
@@ -380,6 +425,7 @@ impl TextBuffer {
             // BufferMotion::Up(repeat) => self.delete_up(repeat),
             BufferMotion::Down(repeat) => self.delete_down(repeat),
             BufferMotion::Word(repeat) => self.delete_word(repeat),
+            BufferMotion::BackSpace(repeat) => self.delete_backspace(repeat),
             // BufferMotion::WORD(repeat) => self.delete_upto_next_whitespace(repeat),
             // BufferMotion::ParagraphStart(repeat) => self.delete_previous_paragraph(repeat),
             BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
@@ -477,7 +523,7 @@ impl TextBuffer {
         self.rows.insert(self.pos.y, String::new());
         self.pos.x = 0;
     }
-    pub fn fix_cursor_pos_escpae_insert(&mut self) {
+    pub fn fix_cursor_pos_escape_insert(&mut self) {
         self.set_x_or(self.end_of_line(), self.pos.x);
     }
     pub fn write_buffer_file(&self) {
