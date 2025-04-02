@@ -95,18 +95,61 @@ impl Terminal {
         let cols = parts[1].parse::<usize>()?;
         Ok(Position { x: cols, y: rows })
     }
+    fn render_start_page(&self, abuf: &mut String) {
+        abuf.push_str("\x1b[2J");
+        abuf.push_str("\r\n");
+        abuf.push_str("\r\n");
+        abuf.push_str("\r\n");
+        abuf.push_str(
+            "\x1b[K     ██████╗░██╗░░░██╗░██████╗████████╗██╗░░░██╗  ██╗░░░██╗██╗███╗░░░███╗\r\n",
+        );
+        abuf.push_str(
+            "\x1b[K     ██╔══██╗██║░░░██║██╔════╝╚══██╔══╝╚██╗░██╔╝  ██║░░░██║██║████╗░████║\r\n",
+        );
+        abuf.push_str(
+            "\x1b[K     ██████╔╝██║░░░██║╚█████╗░░░░██║░░░░╚████╔╝░  ╚██╗░██╔╝██║██╔████╔██║\r\n",
+        );
+        abuf.push_str(
+            "\x1b[K     ██╔══██╗██║░░░██║░╚═══██╗░░░██║░░░░░╚██╔╝░░  ░╚████╔╝░██║██║╚██╔╝██║\r\n",
+        );
+        abuf.push_str(
+            "\x1b[K     ██║░░██║╚██████╔╝██████╔╝░░░██║░░░░░░██║░░░  ░░╚██╔╝░░██║██║░╚═╝░██║\r\n",
+        );
+        abuf.push_str(
+            "\x1b[K     ╚═╝░░╚═╝░╚═════╝░╚═════╝░░░░╚═╝░░░░░░╚═╝░░░  ░░░╚═╝░░░╚═╝╚═╝░░░░░╚═╝\r\n",
+        );
+        abuf.push_str("\r\n");
+        // abuf.push_str("]x1b[K                 Rusty-VIM               \r\n");
+        abuf.push_str(
+            "\x1b[K                  Implementation of Vim like editor in rust              \r\n",
+        );
+        abuf.push_str(
+            "\x1b[K                        version 0.0.1 (pre alpha)                        \r\n",
+        );
+
+        abuf.push_str(
+            "\x1b[K                            By Dijith Dinesh                             \r\n",
+        );
+        abuf.push_str(
+            "\x1b[K                  type  :q<Enter>       to exit                          \r\n",
+        );
+        abuf.push_str(
+            "\x1b[K                  type  i               to enter insert mode             \r\n",
+        );
+    }
     fn render_rows(&self, buffer: &TextBuffer, abuf: &mut String) {
+        if buffer.rows.is_empty() {
+            self.render_start_page(abuf);
+            return;
+        }
         let camera_y_end = self.camera.y + self.size.y - 2;
         for y in self.camera.y..camera_y_end {
             abuf.push_str("\x1b[K"); //clears from current position to end of line
-            // if y < buffer.rows.len() {
             if let Some(line) = buffer.rows.get(y as usize) {
                 abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits));
                 abuf.push_str(line);
                 abuf.push_str("\r\n");
-            }
-            // }
-            else {
+            } else {
                 abuf.push_str("~\r\n");
             }
         }
