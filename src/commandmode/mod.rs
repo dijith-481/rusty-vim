@@ -4,8 +4,10 @@ pub struct CommandMode {
 pub enum CommandReturn<'a> {
     Escape,
     SaveQuit,
-    Quit,
     Save,
+    Quit,
+    ForceQuit,
+    ForceSave,
     FileName(&'a String),
     None,
 }
@@ -43,6 +45,8 @@ impl CommandMode {
     fn execute(&mut self) -> CommandReturn {
         match self.command.as_str() {
             "w" => self.save_file(),
+            "w!" => CommandReturn::ForceSave,
+            "q!" => CommandReturn::ForceQuit,
 
             "q" => {
                 self.command = String::from("quit");

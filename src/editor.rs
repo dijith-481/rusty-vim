@@ -211,28 +211,47 @@ impl Editor {
             match value {
                 CommandReturn::FileName(filename) => {
                     buffer.filename = filename.to_string();
+                    // match buffer.write_buffer_file() {
+                    //     Ok(_) => buffer.,
+                    // }
                     buffer.write_buffer_file();
                     self.exit_flag = true;
                 }
-                CommandReturn::Quit => self.exit_flag = true,
+                CommandReturn::Quit => {
+                    if !buffer.is_changed {
+                        buffer.exit_flag = true
+                    } else {
+                        self.command_mode.command =
+                            String::from("file  changes use q! to force quit");
+                    }
+                }
+                CommandReturn::ForceQuit => self.exit_flag = true,
                 CommandReturn::None => {
                     self.terminal.status_line_right = String::from("None");
                 }
-                CommandReturn::Save => {
+                CommandReturn::ForceSave => {
                     buffer.write_buffer_file();
                     self.terminal.status_line_right = String::from("Save");
                 }
-                CommandReturn::SaveQuit => {
+                CommandReturn::Save => {
                     match buffer.write_buffer_file() {
-                        Ok(_) => self.save_flag = false,
-                        Err(_) => self.save_flag = true,
+                        Ok(_) => self.command_mode.command = String::from("file saved"),
+                        Err(_) => self.command_mode.command = String::from("file saving error"),
                     }
-                    if !self.save_flag {
-                        self.exit_flag = true;
-                    }
-                    self.command_mode.command = String::new();
-                    self.terminal.status_line_right = String::from("enter file name:");
+                    self.terminal.status_line_right = String::from("Save");
                 }
+                CommandReturn::SaveQuit => match buffer.write_buffer_file() {
+                    Ok(_) => buffer.exit_flag = true,
+                    Err(val) => match val {
+                        FileError::FileChanged => {
+                            self.command_mode.command = String::from("file changed use w!")
+                        }
+                        FileError::EmptyFileName => {
+                            self.command_mode.command = String::new();
+                            self.terminal.status_line_right = String::from("enter file name:");
+                        }
+                    },
+                },
                 CommandReturn::Escape => {
                     self.mode = EditorModes::Normal;
                     self.terminal.status_line_right = String::from("Escape");
@@ -274,4 +293,3 @@ impl Editor {
 impl Drop for Editor {
     fn drop(&mut self) {}
 }
-

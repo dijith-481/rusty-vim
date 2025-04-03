@@ -148,7 +148,7 @@ impl Terminal {
             abuf.push_str("\x1b[999B");
             self.render_command_line(abuf);
             abuf.push_str("\r\x1b[A");
-            self.render_status_line(abuf, &buffer.pos);
+            self.render_status_line(abuf, &buffer.pos, &buffer.filename);
             return;
         }
         self.is_start_first_time = false;
@@ -183,12 +183,12 @@ impl Terminal {
                 abuf.push_str("~\r\n");
             }
         }
-        self.render_status_line(abuf, &buffer.pos);
+        self.render_status_line(abuf, &buffer.pos, &buffer.filename);
         abuf.push_str("\r\n");
         self.render_command_line(abuf);
         // abuf.push_str(&self.status_line_right);
     }
-    fn render_status_line(&self, abuf: &mut String, pos: &Position) {
+    fn render_status_line(&self, abuf: &mut String, pos: &Position, filename: &String) {
         abuf.push_str("\x1b[K"); //clears from current position to end of line
         let spaces = " ".repeat(self.size.x);
         abuf.push_str("\x1b[38;2;236;239;244m");
@@ -197,6 +197,9 @@ impl Terminal {
         abuf.push_str("\r\x1b[38;2;46;52;64m");
         abuf.push_str("\x1b[48;2;129;161;193m");
         abuf.push_str(&self.status_line_left);
+        abuf.push_str("\x1b[38;2;236;239;244m");
+        abuf.push_str("\x1b[48;2;76;86;106m");
+        abuf.push_str(filename);
         abuf.push_str(&format!("\r\x1b[{}C", self.size.x - 8));
         let spaces = " ".repeat(8);
         abuf.push_str(&spaces);

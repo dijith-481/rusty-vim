@@ -12,11 +12,13 @@ pub enum AppError {
 #[derive(Debug)]
 pub enum FileError {
     EmptyFileName,
+    FileChanged,
 }
 impl fmt::Display for FileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FileError::EmptyFileName => write!(f, "No filename"),
+            FileError::FileChanged => write!(f, "file changed"),
         }
     }
 }
