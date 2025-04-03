@@ -4,7 +4,7 @@ use crate::{
     normalmode::motions::BufferMotion,
     terminal::Position,
 };
-use std::usize;
+use std::{collections::HashMap, usize};
 pub struct TextBuffer {
     pub filename: String,
     pub rows: Vec<String>,
@@ -19,17 +19,32 @@ pub enum CharClass {
 }
 
 impl TextBuffer {
-    pub fn new(args: Vec<String>) -> Result<Self> {
+    pub fn new(args: Vec<String>) -> Result<HashMap<usize, TextBuffer>> {
+        let mut count: usize = 0;
+        let mut buffers = HashMap::new();
+
+        if args.len() > 1 {
+            for filename in args.iter().skip(1) {
+                let buffer = TextBuffer::create_buffer(filename.clone())?;
+                buffers.insert(count, buffer);
+                count += 1;
+            }
+        } else {
+            let empty_buffer = TextBuffer {
+                filename: String::new(),
+                x_end: 0,
+                rows: Vec::new(),
+                pos: Position::new(),
+            };
+            buffers.insert(count, empty_buffer);
+        }
+
+        Ok(buffers)
+    }
+    pub fn create_buffer(filename: String) -> Result<Self> {
         let rows: Vec<String>;
         let pos = Position::new();
-        let filename: String;
-        if args.len() > 1 {
-            filename = args[1].clone();
-            rows = load_file(&filename)?;
-        } else {
-            filename = String::new();
-            rows = Vec::new();
-        }
+        rows = load_file(&filename)?;
         Ok(Self {
             filename,
             x_end: 0,
@@ -45,15 +60,26 @@ impl TextBuffer {
 
     pub fn insert_char(&mut self, c: u8) {
         if self.rows.is_empty() {
-            let row = String::from(c as char);
+            let row: String;
+            if c == 9 {
+                row = String::from("    ");
+                self.pos.x += 4;
+            } else {
+                row = String::from(c as char);
+                self.pos.x += 1;
+            }
             self.rows.push(row);
-            self.pos.x += 1;
             return;
         }
         if let Some(row) = self.rows.get_mut(self.pos.y) {
-            row.insert(self.pos.x, c as char);
+            if c == 9 {
+                row.insert_str(self.pos.x, "    ");
+                self.pos.x += 4;
+            } else {
+                row.insert(self.pos.x, c as char);
+                self.pos.x += 1;
+            }
         }
-        self.pos.x += 1;
     }
     fn is_valid_y(&self, y: usize) -> bool {
         y < self.rows.len()
@@ -112,6 +138,7 @@ impl TextBuffer {
                 } else {
                     self.pos.y += 1;
                     self.rows.insert(self.pos.y, split_string);
+                    self.pos.x = self.end_of_line();
                 }
             }
         };

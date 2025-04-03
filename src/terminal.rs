@@ -98,6 +98,8 @@ impl Terminal {
         Ok(Position { x: cols, y: rows })
     }
     fn render_start_page(&self, abuf: &mut String) {
+        abuf.push_str("\x1b[38;2;129;161;193m");
+        abuf.push_str("\x1b[48;2;46;52;64m");
         abuf.push_str("\x1b[2J");
         abuf.push_str("\r\n");
         abuf.push_str("\r\n");
@@ -154,12 +156,30 @@ impl Terminal {
 
         let camera_y_end = self.camera.y + self.size.y - 2;
         for y in self.camera.y..camera_y_end {
-            abuf.push_str("\x1b[K"); //clears from current position to end of line
             if let Some(line) = buffer.rows.get(y as usize) {
+                if self.cursor.y + self.camera.y == y {
+                    abuf.push_str("\x1b[48;2;76;86;106m");
+                    abuf.push_str("\x1b[38;2;129;161;193m");
+                } else {
+                    abuf.push_str("\x1b[48;2;46;52;64m");
+                    abuf.push_str("\x1b[38;2;76;86;106m");
+                }
+                abuf.push_str("\x1b[K"); //clears from current position to end of line
+                abuf.push_str("\x1b[48;2;46;52;64m");
+                abuf.push_str("\r");
                 abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits,));
+                abuf.push_str("\x1b[38;2;216;222;233m");
+                if self.cursor.y + self.camera.y == y {
+                    abuf.push_str("\x1b[48;2;76;86;106m");
+                } else {
+                    abuf.push_str("\x1b[48;2;46;52;64m");
+                }
                 abuf.push_str(line);
                 abuf.push_str("\r\n");
             } else {
+                abuf.push_str("\x1b[48;2;46;52;64m");
+                abuf.push_str("\x1b[K"); //clears from current position to end of line
+                abuf.push_str("\x1b[38;2;76;86;106m");
                 abuf.push_str("~\r\n");
             }
         }
@@ -170,12 +190,24 @@ impl Terminal {
     }
     fn render_status_line(&self, abuf: &mut String, pos: &Position) {
         abuf.push_str("\x1b[K"); //clears from current position to end of line
+        let spaces = " ".repeat(self.size.x);
+        abuf.push_str("\x1b[38;2;236;239;244m");
+        abuf.push_str("\x1b[48;2;76;86;106m");
+        abuf.push_str(&spaces);
+        abuf.push_str("\r\x1b[38;2;46;52;64m");
+        abuf.push_str("\x1b[48;2;129;161;193m");
         abuf.push_str(&self.status_line_left);
-        abuf.push_str(&format!("\x1b[{}C", self.size.x - 20));
+        abuf.push_str(&format!("\r\x1b[{}C", self.size.x - 8));
+        let spaces = " ".repeat(8);
+        abuf.push_str(&spaces);
+        abuf.push_str(&format!("\r\x1b[{}C", self.size.x - 7));
         abuf.push_str(&format!("{}:{}", pos.y, pos.x));
     }
     fn render_command_line(&self, abuf: &mut String) {
         abuf.push_str("\r");
+
+        abuf.push_str("\x1b[48;2;46;52;64m");
+        abuf.push_str("\x1b[38;2;216;222;233m");
         abuf.push_str("\x1b[K"); //clears from current position to end of line
         abuf.push_str(&self.command_line);
         abuf.push_str(&format!(
