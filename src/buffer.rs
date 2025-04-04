@@ -1,4 +1,5 @@
 use crate::{
+    editor::InsertType,
     error::{AppError, FileError},
     file::{load_file, write_file_to_disk},
     normalmode::motions::Motion,
@@ -121,7 +122,7 @@ impl TextBuffer {
         }
         x < self.rows.last().map_or(0, |row| row.len())
     }
-    fn set_x_or(&mut self, default: usize, x: usize) {
+    pub fn set_x_or(&mut self, default: usize, x: usize) {
         if self.is_valid_x(x) {
             self.pos.x = x;
         } else {
@@ -518,6 +519,50 @@ impl TextBuffer {
             Motion::EndOfFile => self.move_to_line(self.end_of_file()),
         }
     }
+    fn insert_append(&mut self, pos: usize) {
+        if self.rows.len() > self.pos.y {
+            let line_len = self.rows.get(self.pos.y).unwrap().len();
+            if pos <= line_len {
+                self.pos.x = pos;
+            } else {
+                self.pos.x = line_len;
+            }
+        }
+    }
+    fn insert_prev_line(&mut self) {
+        if self.rows.len() > self.pos.y {
+            let first_char = self.first_non_white_space();
+            self.pos.y.saturating_sub(1);
+            self.rows
+                .insert(self.pos.y, String::from(" ".repeat(first_char)));
+            self.pos.x = first_char;
+        }
+    }
+    fn insert_next_line(&mut self) {
+        if self.rows.len() > self.pos.y {
+            let first_char = self.first_non_white_space();
+            self.pos.y += 1;
+            self.rows
+                .insert(self.pos.y, String::from(" ".repeat(first_char)));
+            self.pos.x = first_char;
+        }
+        if self.rows.is_empty() {
+            self.pos.y += 1;
+            self.rows.push(String::new());
+            self.rows.push(String::new());
+        }
+    }
+    pub fn insert(&mut self, pos: InsertType) {
+        match pos {
+            InsertType::Append => self.insert_append(self.pos.x + 1),
+            InsertType::InsertStart => self.pos.x = self.first_non_white_space(),
+
+            InsertType::AppendEnd => self.insert_append(self.end_of_line() + 1),
+            InsertType::Next => self.insert_next_line(),
+            InsertType::Prev => self.insert_prev_line(),
+            InsertType::None => (),
+        }
+    }
 
     pub fn delete(&mut self, direction: Motion) {
         // self.is_changed = true;
@@ -631,3 +676,4 @@ impl TextBuffer {
 fn is_line_full(line: &String, end: usize) -> bool {
     line.len() <= end
 }
+

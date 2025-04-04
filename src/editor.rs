@@ -80,11 +80,10 @@ impl Editor {
         if motion_given {
             let repeat = max(self.normal_mode.pending_operations.repeat, 1);
             let action = self.normal_mode.handle_operation(repeat);
-            self.hand_operation(action);
-            // self.handle_operation(repeat);
+            self.handle_operation(action);
         }
     }
-    fn hand_operation(&mut self, action: BufferAction) {
+    fn handle_operation(&mut self, action: BufferAction) {
         if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
             match action {
                 BufferAction::Delete(direction) => buffer.delete(direction),
@@ -100,21 +99,7 @@ impl Editor {
         let buffer = self.buffers.get_mut(&self.current_buffer).unwrap();
         self.mode = mode;
         match mode {
-            EditorModes::Insert => match pos {
-                InsertType::Append => {
-                    buffer.pos.x += 1;
-                }
-                InsertType::InsertStart => {
-                    buffer.pos.x = buffer.first_non_white_space();
-                }
-                InsertType::AppendEnd => {
-                    buffer.pos.x = buffer.end_of_line() + 1;
-                }
-                // InsertType::Next => {
-                //     buffer.pos.x = buffer.end_of_line() + 1;
-                // }
-                _ => (),
-            },
+            EditorModes::Insert => buffer.insert(pos),
             EditorModes::Command => {
                 self.process_command_mode(self.normal_mode.pending_operations.motion as u8);
                 self.terminal.status_line_left = String::from(":");
