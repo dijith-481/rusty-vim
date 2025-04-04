@@ -294,9 +294,9 @@ impl Terminal {
     pub fn middle_screen_pos(&self) -> usize {
         self.cursor.y + self.size.y / 2 - 1
     }
-    pub fn top_screen_pos(&self) -> usize {
-        self.cursor.y
-    }
+    // pub fn top_screen_pos(&self) -> usize {
+    //     self.cursor.y
+    // }
     pub fn bottom_screen_pos(&self) -> usize {
         self.cursor.y + self.size.y - 2
     }

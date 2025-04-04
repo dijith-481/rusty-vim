@@ -1,10 +1,9 @@
 use crate::{
     error::{AppError, FileError},
     file::{load_file, write_file_to_disk},
-    normalmode::motions::BufferMotion,
+    normalmode::motions::Motion,
     terminal::Position,
 };
-use core::time;
 use std::{
     collections::HashMap,
     fs,
@@ -270,7 +269,14 @@ impl TextBuffer {
         self.x_end = self.pos.x;
     }
     fn delete_right(&mut self, repeat: usize) {
-        let new_x = self.pos.x + repeat;
+        let mut new_x = self.pos.x + repeat;
+        if new_x > self.end_of_line() + 1 {
+            new_x = self.end_of_line() + 1;
+        }
+        if self.get_current_line().unwrap().len() == 0 {
+            return;
+        }
+
         self.delete_str(self.pos.x, new_x);
         self.set_x_or(self.end_of_line(), self.pos.x);
         self.x_end = self.pos.x;
@@ -283,12 +289,12 @@ impl TextBuffer {
         self.move_to_x(self.pos.x + repeat);
         self.x_end = self.pos.x;
     }
-    fn end_of_line(&self) -> usize {
+    pub fn end_of_line(&self) -> usize {
         self.get_current_line()
             .map_or(0, |row| row.len().saturating_sub(1))
     }
 
-    fn first_non_white_space(&self) -> usize {
+    pub fn first_non_white_space(&self) -> usize {
         self.get_current_line().map_or(0, |row| {
             row.chars()
                 .position(|c| !c.is_whitespace())
@@ -493,45 +499,45 @@ impl TextBuffer {
             _ => CharClass::Other,
         }
     }
-    pub fn motion(&mut self, direction: BufferMotion) {
+    pub fn motion(&mut self, direction: Motion) {
         match direction {
-            BufferMotion::Left(repeat) => self.move_left(repeat),
-            BufferMotion::Right(repeat) => self.move_right(repeat),
-            BufferMotion::Up(repeat) => self.move_up(repeat),
-            BufferMotion::Down(repeat) => self.move_down(repeat),
-            BufferMotion::BackSpace(repeat) => self.move_backspace(repeat),
-            BufferMotion::Word(repeat) => self.move_next_word(repeat),
-            BufferMotion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
-            BufferMotion::ParagraphStart(repeat) => self.move_previous_paragraph(repeat),
-            BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
-            BufferMotion::StartOfLine => self.move_to_start_of_line(),
-            BufferMotion::EndOfLine(repeat) => self.move_to_end_of_line(repeat),
-            BufferMotion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
-            BufferMotion::GoToX(pos) => self.move_to_x(pos),
-            BufferMotion::GoToLine(line) => self.move_to_line(line),
-            BufferMotion::EndOfFile => self.move_to_line(self.end_of_file()),
+            Motion::Left(repeat) => self.move_left(repeat),
+            Motion::Right(repeat) => self.move_right(repeat),
+            Motion::Up(repeat) => self.move_up(repeat),
+            Motion::Down(repeat) => self.move_down(repeat),
+            Motion::BackSpace(repeat) => self.move_backspace(repeat),
+            Motion::Word(repeat) => self.move_next_word(repeat),
+            Motion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
+            Motion::ParagraphStart(repeat) => self.move_previous_paragraph(repeat),
+            Motion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
+            Motion::StartOfLine => self.move_to_start_of_line(),
+            Motion::EndOfLine(repeat) => self.move_to_end_of_line(repeat),
+            Motion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
+            Motion::GoToX(pos) => self.move_to_x(pos),
+            Motion::GoToLine(line) => self.move_to_line(line),
+            Motion::EndOfFile => self.move_to_line(self.end_of_file()),
         }
     }
 
-    pub fn delete(&mut self, direction: BufferMotion) {
+    pub fn delete(&mut self, direction: Motion) {
         // self.is_changed = true;
         match direction {
-            BufferMotion::Left(repeat) => self.delete_left(repeat),
-            BufferMotion::Right(repeat) => self.delete_right(repeat),
+            Motion::Left(repeat) => self.delete_left(repeat),
+            Motion::Right(repeat) => self.delete_right(repeat),
             // BufferMotion::Up(repeat) => self.delete_up(repeat),
-            BufferMotion::Down(repeat) => self.delete_down(repeat),
-            BufferMotion::Word(repeat) => self.delete_word(repeat),
-            BufferMotion::BackSpace(repeat) => self.delete_backspace(repeat),
+            Motion::Down(repeat) => self.delete_down(repeat),
+            Motion::Word(repeat) => self.delete_word(repeat),
+            Motion::BackSpace(repeat) => self.delete_backspace(repeat),
             // BufferMotion::WORD(repeat) => self.delete_upto_next_whitespace(repeat),
             // BufferMotion::ParagraphStart(repeat) => self.delete_previous_paragraph(repeat),
-            BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
-            BufferMotion::StartOfLine => self.move_to_start_of_line(),
-            BufferMotion::EndOfLine(repeat) => self.delete_to_end_of_line(repeat),
-            BufferMotion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
+            Motion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
+            Motion::StartOfLine => self.move_to_start_of_line(),
+            Motion::EndOfLine(repeat) => self.delete_to_end_of_line(repeat),
+            Motion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
             // BufferMotion::GoToX(pos) => self.move_to_x(pos),
             // BufferMotion::GoToLine(line) => self.delete_lines(line),
-            BufferMotion::EndOfFile => self.move_to_line(self.end_of_file()),
-            BufferMotion::EndOfFile => self.delete_lines(self.pos.y, self.end_of_file() + 1),
+            Motion::EndOfFile => self.move_to_line(self.end_of_file()),
+            Motion::EndOfFile => self.delete_lines(self.pos.y, self.end_of_file() + 1),
             // BufferMotion::Word(repeat) => {
             //     let start = self.pos.x;
             //     self.move_next_word(1);
@@ -539,15 +545,15 @@ impl TextBuffer {
             //     self.delete_str(start, end + 1);
             //     self.pos.x = start;
             // }
-            BufferMotion::GoToLine(line) => self.move_to_line(line),
-            BufferMotion::GoToX(pos) => self.move_to_x(pos),
-            BufferMotion::StartOfLine => self.move_to_start_of_line(),
-            BufferMotion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
-            BufferMotion::ParagraphStart(repeat) => self.move_previous_paragraph(repeat),
-            BufferMotion::Word(repeat) => self.move_next_word(repeat),
-            BufferMotion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
-            BufferMotion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
-            BufferMotion::EndOfLine(repeat) => self.move_to_end_of_line(repeat),
+            Motion::GoToLine(line) => self.move_to_line(line),
+            Motion::GoToX(pos) => self.move_to_x(pos),
+            Motion::StartOfLine => self.move_to_start_of_line(),
+            Motion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
+            Motion::ParagraphStart(repeat) => self.move_previous_paragraph(repeat),
+            Motion::Word(repeat) => self.move_next_word(repeat),
+            Motion::WORD(repeat) => self.move_next_word_after_white_space(repeat),
+            Motion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
+            Motion::EndOfLine(repeat) => self.move_to_end_of_line(repeat),
             _ => (),
         }
     }
@@ -625,4 +631,3 @@ impl TextBuffer {
 fn is_line_full(line: &String, end: usize) -> bool {
     line.len() <= end
 }
-

@@ -16,8 +16,8 @@ impl PendingOperations {
         let keys_modifier = ['i', 'a', 'f'];
         let valid_modifiers: HashSet<char> = keys_modifier.iter().cloned().collect();
         let keys_motion = [
-            'h', 'j', 'k', 'l', 'x', 'd', 'g', 'G', 'a', 'i', 'A', 'o', 'O', 'H', 'M', 'L', 'w',
-            'W', 'e', '{', '}', ':', 'y', '^', '$', '0', '\x7F',
+            'h', 'j', 'k', 'l', 'x', 'd', 'g', 'G', 'a', 'I', 'i', 'A', 'o', 'O', 'H', 'M', 'L',
+            'w', 'W', 'e', '{', '}', ':', 'y', '^', '$', '0', '\x7F',
         ];
         let valid_motions: HashSet<char> = keys_motion.iter().cloned().collect();
         Self {
