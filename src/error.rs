@@ -5,6 +5,7 @@ use std::{
 #[derive(Debug)]
 pub enum AppError {
     TermError,
+    BufferError,
     Io(io::Error),
     FileWriteError(FileError),
     ParseIntError(num::ParseIntError),
@@ -27,6 +28,7 @@ impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AppError::TermError => write!(f, "Terminal error"),
+            AppError::BufferError => write!(f, "Error opening buffer"),
             AppError::Io(e) => write!(f, "I/O error: {}", e),
             AppError::ParseIntError(e) => write!(f, "I/O error: {}", e),
             AppError::FileWriteError(file_error) => write!(f, "File write error: {}", file_error),

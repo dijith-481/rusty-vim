@@ -1,27 +1,19 @@
-use crate::buffer::{self, TextBuffer};
+use crate::buffer::TextBuffer;
 use crate::commandmode::{CommandMode, CommandReturn};
 use crate::error::{AppError, FileError, Result};
+use crate::insertmode::InsertAction;
+use crate::insertmode::InsertType;
 use crate::normalmode::NormalMode;
+use crate::normalmode::motions::BufferAction;
 use crate::normalmode::motions::Motion;
-use crate::normalmode::motions::{BufferAction, NormalAction};
 use crate::terminal::Terminal;
-use std::cmp::{self, max};
 use std::collections::HashMap;
-use std::env;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum EditorModes {
     Normal,
     Insert,
     Command,
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InsertType {
-    None,
-    Append,
-    InsertStart,
-    AppendEnd,
-    Next,
-    Prev,
 }
 
 pub struct Editor {
@@ -36,8 +28,7 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn new() -> Result<Self> {
-        let args: Vec<String> = env::args().collect();
+    pub fn new(args: Vec<String>) -> Result<Self> {
         let buffers = TextBuffer::new(args)?;
         let current_buffer: usize = 0;
         let curr_buff = buffers.get(&current_buffer).unwrap();
@@ -53,35 +44,31 @@ impl Editor {
             mode: EditorModes::Normal,
         })
     }
+
     pub fn run(&mut self) -> Result<()> {
         loop {
-            if self.exit_flag {
+            if self.buffers.len() == 0 {
                 return Ok(());
             }
             self.process_keypress()?;
             self.render_ui()?;
         }
     }
+
     fn render_ui(&mut self) -> Result<()> {
         if let Some(buffer) = self.buffers.get(&self.current_buffer) {
             self.terminal.refresh_screen(buffer)?;
             return Ok(());
         }
-        Err(AppError::TermError)
+        Err(AppError::BufferError)
     }
 
     fn process_normal_mode(&mut self, c: u8) {
-        if c < 32 {
-            return;
+        match self.normal_mode.handle_keypress(c) {
+            Ok(action) => self.handle_operation(action),
+            Err(_) => (),
         }
-        self.normal_mode.pending_operations.insert_key(c as char);
         self.terminal.status_line_right = String::from(self.normal_mode.pending_operations.motion);
-        let motion_given = self.normal_mode.pending_operations.is_motion_given();
-        if motion_given {
-            let repeat = max(self.normal_mode.pending_operations.repeat, 1);
-            let action = self.normal_mode.handle_operation(repeat);
-            self.handle_operation(action);
-        }
     }
     fn handle_operation(&mut self, action: BufferAction) {
         if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
@@ -107,21 +94,6 @@ impl Editor {
             _ => (),
         }
     }
-    fn normal_action(&mut self, action: NormalAction) {
-        if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
-            match action {
-                NormalAction::Move(direction) => buffer.motion(direction),
-                NormalAction::ChangeMode(editormode) => {
-                    self.terminal.change_cursor(editormode);
-                    self.mode = editormode;
-                }
-                NormalAction::NewLine => buffer.insert_newline(),
-                NormalAction::Delete => buffer.delete_char(),
-                _ => (),
-            }
-        }
-    }
-
     fn activate_normal_mode(&mut self) {
         if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
             buffer.fix_cursor_pos_escape_insert();
@@ -132,22 +104,16 @@ impl Editor {
 
     fn process_insert_mode(&mut self, c: u8) {
         if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
-            if c == b'\x1b' {
-                self.activate_normal_mode();
-                return;
-            } else if c == 127 {
-                buffer.delete(Motion::BackSpace(1));
-                // buffer.delete(BufferMotion::Left(1));
-                // buffer.motion(BufferMotion::Left(1));
-            } else if c == 13 {
-                buffer.split_line();
-                // buffer.pos.y += 1;
-                // self.normal_action(NormalAction::NewLine);
-            } else if c == 9 || !((c) < 32) {
-                buffer.insert_char(c);
+            match InsertAction::handle_key(c) {
+                InsertAction::Backspace => buffer.delete(Motion::BackSpace(1)),
+                InsertAction::Escape => self.activate_normal_mode(),
+                InsertAction::Newline => buffer.split_line(),
+                InsertAction::Chars(c) => buffer.insert_char(c),
+                InsertAction::None => (),
             }
         }
     }
+
     fn process_command_mode(&mut self, c: u8) {
         if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
             let value = self.command_mode.handle_key(c, self.save_flag);

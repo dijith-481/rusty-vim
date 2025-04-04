@@ -1,4 +1,6 @@
-use crate::editor::{EditorModes, InsertType};
+use crate::editor::EditorModes;
+
+use crate::insertmode::InsertType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Motion {

@@ -1,7 +1,7 @@
 use crate::{
-    editor::InsertType,
     error::{AppError, FileError},
     file::{load_file, write_file_to_disk},
+    insertmode::InsertType,
     normalmode::motions::Motion,
     terminal::Position,
 };
@@ -555,8 +555,7 @@ impl TextBuffer {
     pub fn insert(&mut self, pos: InsertType) {
         match pos {
             InsertType::Append => self.insert_append(self.pos.x + 1),
-            InsertType::InsertStart => self.pos.x = self.first_non_white_space(),
-
+            InsertType::InsertStart => self.move_to_first_non_white_space(),
             InsertType::AppendEnd => self.insert_append(self.end_of_line() + 1),
             InsertType::Next => self.insert_next_line(),
             InsertType::Prev => self.insert_prev_line(),

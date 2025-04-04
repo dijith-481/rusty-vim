@@ -1,11 +1,16 @@
 pub mod motions;
 pub mod operation_pending;
-use std::cmp::max;
 
+use crate::insertmode::InsertType;
+use crate::{editor::EditorModes, error::AppError};
 use motions::{BufferAction, Motion};
 use operation_pending::PendingOperations;
+use std::cmp::max;
 
-use crate::editor::{EditorModes, InsertType};
+pub enum InsertError {
+    NomotionGiven,
+    InvalidKey,
+}
 
 pub struct NormalMode {
     pub pending_operations: PendingOperations,
@@ -15,6 +20,20 @@ impl NormalMode {
         let pending_operations = PendingOperations::new();
         Self { pending_operations }
     }
+    pub fn handle_keypress(&mut self, c: u8) -> Result<BufferAction, AppError> {
+        if c < 32 {
+            return Err(AppError::TermError);
+        }
+        self.pending_operations.insert_key(c as char);
+        let motion_given = self.pending_operations.is_motion_given();
+        if motion_given {
+            let repeat = max(self.pending_operations.repeat, 1);
+            let action = self.handle_operation(repeat);
+            return Ok(action);
+        }
+        Err(AppError::TermError)
+    }
+
     pub fn handle_operation(&mut self, repeat: usize) -> BufferAction {
         // return BufferAction::Move(Motion::WORD(1));
         if self.pending_operations.is_action_given() {
