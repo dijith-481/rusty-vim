@@ -19,7 +19,8 @@ pub enum EditorModes {
 pub struct Editor {
     terminal: Terminal,
     buffers: HashMap<usize, TextBuffer>,
-    current_buffer: usize,
+    buff_vec: Vec<usize>,
+    current_buff_index: usize,
     pub exit_flag: bool,
     save_flag: bool,
     pub mode: EditorModes,
@@ -29,14 +30,16 @@ pub struct Editor {
 
 impl Editor {
     pub fn new(args: Vec<String>) -> Result<Self> {
-        let buffers = TextBuffer::new(args)?;
-        let current_buffer: usize = 0;
-        let curr_buff = buffers.get(&current_buffer).unwrap();
+        let mut buff_vec: Vec<usize> = Vec::new();
+        let buffers = TextBuffer::new(args, &mut buff_vec)?;
+        let current_buff_index: usize = 0;
+        let curr_buff = buffers.get(&buff_vec[0]).unwrap();
         let terminal = Terminal::new(curr_buff.rows.len(), &curr_buff.filename)?;
         Ok(Self {
             normal_mode: NormalMode::new(),
+            buff_vec,
             command_mode: CommandMode::new(),
-            current_buffer,
+            current_buff_index,
             terminal,
             buffers,
             exit_flag: false,
@@ -55,8 +58,17 @@ impl Editor {
         }
     }
 
+    fn get_buff_key(&mut self) -> usize {
+        if self.buff_vec.len() <= self.current_buff_index {
+            self.current_buff_index = self.buff_vec.len().saturating_sub(1);
+        }
+        let curr_buff_key = self.buff_vec.get(self.current_buff_index).unwrap().clone();
+        curr_buff_key
+    }
+
     fn render_ui(&mut self) -> Result<()> {
-        if let Some(buffer) = self.buffers.get(&self.current_buffer) {
+        let curr_buff_key = self.get_buff_key();
+        if let Some(buffer) = self.buffers.get(&curr_buff_key) {
             self.terminal.refresh_screen(buffer)?;
             return Ok(());
         }
@@ -71,7 +83,8 @@ impl Editor {
         self.terminal.status_line_right = String::from(self.normal_mode.pending_operations.motion);
     }
     fn handle_operation(&mut self, action: BufferAction) {
-        if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
+        let curr_buff_key = self.get_buff_key();
+        if let Some(buffer) = self.buffers.get_mut(&curr_buff_key) {
             match action {
                 BufferAction::Delete(direction) => buffer.delete(direction),
                 BufferAction::Move(direction) => buffer.motion(direction),
@@ -83,19 +96,23 @@ impl Editor {
         self.normal_mode.pending_operations.reset();
     }
     fn change_mode(&mut self, mode: EditorModes, pos: InsertType) {
-        let buffer = self.buffers.get_mut(&self.current_buffer).unwrap();
-        self.mode = mode;
-        match mode {
-            EditorModes::Insert => buffer.insert(pos),
-            EditorModes::Command => {
-                self.process_command_mode(self.normal_mode.pending_operations.motion as u8);
-                self.terminal.status_line_left = String::from(":");
+        let curr_buff_key = self.get_buff_key();
+        if let Some(buffer) = self.buffers.get_mut(&curr_buff_key) {
+            self.mode = mode;
+            self.terminal.change_cursor(mode);
+            match mode {
+                EditorModes::Insert => buffer.insert(pos),
+                EditorModes::Command => {
+                    self.process_command_mode(self.normal_mode.pending_operations.motion as u8);
+                    self.terminal.status_line_left = String::from(":");
+                }
+                _ => (),
             }
-            _ => (),
         }
     }
     fn activate_normal_mode(&mut self) {
-        if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
+        let curr_buff_key = self.get_buff_key();
+        if let Some(buffer) = self.buffers.get_mut(&curr_buff_key) {
             buffer.fix_cursor_pos_escape_insert();
             self.terminal.change_cursor(EditorModes::Normal);
             self.mode = EditorModes::Normal;
@@ -103,7 +120,8 @@ impl Editor {
     }
 
     fn process_insert_mode(&mut self, c: u8) {
-        if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
+        let curr_buff_key = self.get_buff_key();
+        if let Some(buffer) = self.buffers.get_mut(&curr_buff_key) {
             match InsertAction::handle_key(c) {
                 InsertAction::Backspace => buffer.delete(Motion::BackSpace(1)),
                 InsertAction::Escape => self.activate_normal_mode(),
@@ -115,7 +133,8 @@ impl Editor {
     }
 
     fn process_command_mode(&mut self, c: u8) {
-        if let Some(buffer) = self.buffers.get_mut(&self.current_buffer) {
+        let curr_buff_key = self.get_buff_key();
+        if let Some(buffer) = self.buffers.get_mut(&curr_buff_key) {
             let value = self.command_mode.handle_key(c, self.save_flag);
             match value {
                 CommandReturn::FileName(filename) => {

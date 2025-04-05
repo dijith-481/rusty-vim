@@ -28,8 +28,11 @@ pub enum CharClass {
 }
 
 impl TextBuffer {
-    pub fn new(args: Vec<String>) -> Result<HashMap<usize, TextBuffer>, AppError> {
-        let mut count: usize = 0;
+    pub fn new(
+        args: Vec<String>,
+        buff_vec: &mut Vec<usize>,
+    ) -> Result<HashMap<usize, TextBuffer>, AppError> {
+        let mut count: usize = 1000;
         let mut buffers = HashMap::new();
 
         if args.len() > 1 {
@@ -37,6 +40,7 @@ impl TextBuffer {
                 let modified_time = Self::get_modified_time(filename)?;
                 let buffer = TextBuffer::create_buffer(filename.clone(), modified_time)?;
                 buffers.insert(count, buffer);
+                buff_vec.push(count);
                 count += 1;
             }
         } else {
@@ -51,6 +55,7 @@ impl TextBuffer {
                 rows: Vec::new(),
                 pos: Position::new(),
             };
+            buff_vec.push(count);
             buffers.insert(count, empty_buffer);
         }
 
@@ -675,4 +680,3 @@ impl TextBuffer {
 fn is_line_full(line: &String, end: usize) -> bool {
     line.len() <= end
 }
-
