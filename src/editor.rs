@@ -139,14 +139,20 @@ impl Editor {
             match self.command_mode.handle_key(c) {
                 CommandReturn::Quit => {
                     if !buffer.is_changed {
+                        self.command_mode.escape("");
                         should_quit = true;
                     } else {
                         self.command_mode
                             .escape("file  changes use q! to force quit");
                         self.change_mode(EditorModes::Normal, InsertType::None);
                     }
+                    self.mode = EditorModes::Normal;
                 }
-                CommandReturn::ForceQuit => should_quit = true,
+                CommandReturn::ForceQuit => {
+                    self.mode = EditorModes::Normal;
+                    self.command_mode.escape("");
+                    should_quit = true;
+                }
                 CommandReturn::ForceSave(filename) => {
                     let result = buffer.write_buffer_file(true, filename);
                     self.command_mode.handle_file_write_result(result);
@@ -232,6 +238,7 @@ impl Editor {
             self.current_buff_index += 1;
         }
         self.command_mode.escape("");
+        self.mode = EditorModes::Normal;
     }
 
     fn process_keypress(&mut self) -> Result<()> {
