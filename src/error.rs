@@ -5,20 +5,22 @@ use std::{
 #[derive(Debug)]
 pub enum AppError {
     TermError,
-    BufferError,
+    BufferError(String),
     Io(io::Error),
-    FileWriteError(FileError),
+    FileWriteError,
     ParseIntError(num::ParseIntError),
 }
 #[derive(Debug)]
 pub enum FileError {
     EmptyFileName,
     FileChanged,
+    OtherError(AppError),
 }
 impl fmt::Display for FileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FileError::EmptyFileName => write!(f, "No filename"),
+            FileError::OtherError(_) => write!(f, "other error"),
             FileError::FileChanged => write!(f, "file changed"),
         }
     }
@@ -28,10 +30,10 @@ impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AppError::TermError => write!(f, "Terminal error"),
-            AppError::BufferError => write!(f, "Error opening buffer"),
+            AppError::BufferError(e) => write!(f, "Error opening buffer {}", e),
             AppError::Io(e) => write!(f, "I/O error: {}", e),
             AppError::ParseIntError(e) => write!(f, "I/O error: {}", e),
-            AppError::FileWriteError(file_error) => write!(f, "File write error: {}", file_error),
+            AppError::FileWriteError => write!(f, "File write error: ",),
         }
     }
 }

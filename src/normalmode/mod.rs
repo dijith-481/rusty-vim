@@ -39,7 +39,7 @@ impl NormalMode {
         if self.pending_operations.is_action_given() {
             match self.pending_operations.action {
                 'd' => match self.pending_operations.motion {
-                    'd' => BufferAction::Delete(Motion::Down(0)),
+                    'd' => BufferAction::Delete(Motion::Down(repeat.saturating_sub(1))),
                     'h' => BufferAction::Delete(Motion::Left(repeat)),
                     'l' => BufferAction::Delete(Motion::Right(repeat)),
                     '$' => BufferAction::Delete(Motion::EndOfLine(repeat)),

@@ -12,7 +12,7 @@ use std::{
     usize,
 };
 pub struct TextBuffer {
-    pub filename: String,
+    pub filename: Option<String>,
     pub modified_time: Duration,
     pub rows: Vec<String>,
     pub pos: Position,
@@ -28,7 +28,7 @@ pub enum CharClass {
 }
 
 impl TextBuffer {
-    pub fn new(
+    pub fn load_buffers(
         args: Vec<String>,
         buff_vec: &mut Vec<usize>,
     ) -> Result<HashMap<usize, TextBuffer>, AppError> {
@@ -37,42 +37,52 @@ impl TextBuffer {
 
         if args.len() > 1 {
             for filename in args.iter().skip(1) {
-                let modified_time = Self::get_modified_time(filename)?;
-                let buffer = TextBuffer::create_buffer(filename.clone(), modified_time)?;
+                let buffer = TextBuffer::new(Some(filename.clone()))?;
                 buffers.insert(count, buffer);
                 buff_vec.push(count);
                 count += 1;
             }
         } else {
-            let now = SystemTime::now();
-            let modified_time = now.duration_since(UNIX_EPOCH).unwrap();
-            let empty_buffer = TextBuffer {
-                exit_flag: false,
-                is_changed: false,
-                filename: String::new(),
-                modified_time,
-                x_end: 0,
-                rows: Vec::new(),
-                pos: Position::new(),
-            };
+            let buffer = Self::create_empty_buffer().unwrap();
             buff_vec.push(count);
-            buffers.insert(count, empty_buffer);
+            buffers.insert(count, buffer);
         }
 
         Ok(buffers)
     }
-    pub fn get_modified_time(filename: &String) -> Result<Duration, AppError> {
+    pub fn get_modified_time(filename: &String) -> Duration {
         let modified_time: Duration;
-        let metadata = fs::metadata(filename)?;
-        if let Ok(modified) = metadata.modified() {
-            modified_time = modified.duration_since(UNIX_EPOCH).unwrap();
-        } else {
-            let now = SystemTime::now();
-            modified_time = now.duration_since(UNIX_EPOCH).unwrap();
+        match fs::metadata(filename) {
+            Ok(metadata) => {
+                if let Ok(modified) = metadata.modified() {
+                    modified_time = modified.duration_since(UNIX_EPOCH).unwrap();
+                } else {
+                    let now = SystemTime::now();
+                    modified_time = now.duration_since(UNIX_EPOCH).unwrap();
+                }
+            }
+            Err(_) => {
+                let now = SystemTime::now();
+                modified_time = now.duration_since(UNIX_EPOCH).unwrap();
+            }
         }
-        Ok(modified_time)
+        modified_time
     }
-    pub fn create_buffer(filename: String, modified_time: Duration) -> Result<Self, AppError> {
+    fn create_empty_buffer() -> Result<TextBuffer, AppError> {
+        let now = SystemTime::now();
+        let modified_time = now.duration_since(UNIX_EPOCH).unwrap();
+        Ok(TextBuffer {
+            exit_flag: false,
+            is_changed: false,
+            filename: None,
+            modified_time,
+            x_end: 0,
+            rows: Vec::new(),
+            pos: Position::new(),
+        })
+    }
+    fn create_file_buffer(filename: String) -> Result<TextBuffer, AppError> {
+        let modified_time = Self::get_modified_time(&filename);
         let rows: Vec<String>;
         let pos = Position::new();
         rows = load_file(&filename)?;
@@ -80,16 +90,18 @@ impl TextBuffer {
             is_changed: false,
             exit_flag: false,
             modified_time,
-            filename,
+            filename: Some(filename),
             x_end: 0,
             rows,
             pos,
         })
     }
 
-    pub fn write_buffer_to_disk(&self) -> Result<(), FileError> {
-        write_file_to_disk(&self.filename, &self.rows);
-        Ok(())
+    pub fn new(filename: Option<String>) -> Result<Self, AppError> {
+        match filename {
+            None => Self::create_empty_buffer(),
+            Some(name) => Self::create_file_buffer(name),
+        }
     }
 
     pub fn insert_char(&mut self, c: u8) {
@@ -325,9 +337,6 @@ impl TextBuffer {
         self.set_x_or(self.end_of_line(), self.x_end);
     }
     fn delete_down(&mut self, repeat: usize) {
-        if self.pos.y + repeat >= self.rows.len() {
-            return;
-        }
         self.delete_lines(self.pos.y, self.pos.y + repeat + 1);
     }
     fn get_next_empty_string(&self) -> usize {
@@ -558,6 +567,7 @@ impl TextBuffer {
         }
     }
     pub fn insert(&mut self, pos: InsertType) {
+        self.is_changed = true;
         match pos {
             InsertType::Append => self.insert_append(self.pos.x + 1),
             InsertType::InsertStart => self.move_to_first_non_white_space(),
@@ -569,7 +579,7 @@ impl TextBuffer {
     }
 
     pub fn delete(&mut self, direction: Motion) {
-        // self.is_changed = true;
+        self.is_changed = true;
         match direction {
             Motion::Left(repeat) => self.delete_left(repeat),
             Motion::Right(repeat) => self.delete_right(repeat),
@@ -585,7 +595,6 @@ impl TextBuffer {
             Motion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
             // BufferMotion::GoToX(pos) => self.move_to_x(pos),
             // BufferMotion::GoToLine(line) => self.delete_lines(line),
-            Motion::EndOfFile => self.move_to_line(self.end_of_file()),
             Motion::EndOfFile => self.delete_lines(self.pos.y, self.end_of_file() + 1),
             // BufferMotion::Word(repeat) => {
             //     let start = self.pos.x;
@@ -669,12 +678,33 @@ impl TextBuffer {
     pub fn fix_cursor_pos_escape_insert(&mut self) {
         self.set_x_or(self.end_of_line(), self.pos.x);
     }
-    pub fn write_buffer_file(&self) -> Result<(), FileError> {
-        let modified_time = Self::get_modified_time(&self.filename).unwrap();
-        if modified_time == self.modified_time {
-            return write_file_to_disk(&self.filename, &self.rows);
-        };
-        Err(FileError::FileChanged)
+    pub fn write_buffer_file(
+        &mut self,
+        force: bool,
+        filename: Option<String>,
+    ) -> Result<String, FileError> {
+        if let Some(name) = filename {
+            write_file_to_disk(&name, &self.rows).map_err(|e| FileError::OtherError(e));
+            self.modified_time = Self::get_modified_time(&name);
+            self.is_changed = false;
+            if self.filename.is_none() {
+                self.filename = Some(name.clone())
+            }
+            return Ok(name);
+        } else if let Some(name) = self.filename.clone() {
+            if !force {
+                let modified_time = Self::get_modified_time(&name);
+                if modified_time != self.modified_time {
+                    return Err(FileError::FileChanged);
+                }
+            };
+            write_file_to_disk(&name, &self.rows).map_err(|e| FileError::OtherError(e));
+            self.modified_time = Self::get_modified_time(&name);
+            self.is_changed = false;
+            return Ok(name);
+        } else {
+            return Err(FileError::EmptyFileName);
+        }
     }
 }
 fn is_line_full(line: &String, end: usize) -> bool {

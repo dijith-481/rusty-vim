@@ -98,57 +98,44 @@ impl Terminal {
         Ok(Position { x: cols, y: rows })
     }
     fn render_start_page(&self, abuf: &mut String) {
+        let content = [
+            "██████╗ ██╗   ██╗ ██████╗████████╗██╗   ██╗   ██╗   ██╗██╗███╗   ███╗",
+            "██╔══██╗██║   ██║██╔════╝╚══██╔══╝╚██╗ ██╔╝   ██║   ██║██║████╗ ████║",
+            "██████╔╝██║   ██║╚█████╗    ██║    ╚████╔╝    ╚██╗ ██╔╝██║██╔████╔██║",
+            "██╔══██╗██║   ██║ ╚═══██╗   ██║     ╚██╔╝      ╚████╔╝ ██║██║╚██╔╝██║",
+            "██║  ██║╚██████╔╝██████╔╝   ██║      ██║        ╚██╔╝  ██║██║ ╚═╝ ██║",
+            "╚═╝  ╚═╝ ╚═════╝ ╚═════╝    ╚═╝      ╚═╝         ╚═╝   ╚═╝╚═╝     ╚═╝",
+            "",
+            "Implementation of Vim-like text-editor in rust",
+            "version 0.1.0",
+            "By Dijith Dinesh",
+            "",
+            "type  :q<Enter>       to exit             ",
+            "type  i               to enter insert mode",
+        ];
+
         abuf.push_str("\x1b[38;2;129;161;193m");
         abuf.push_str("\x1b[48;2;46;52;64m");
         abuf.push_str("\x1b[2J");
-        abuf.push_str("\r\n");
-        abuf.push_str("\r\n");
-        abuf.push_str("\r\n");
-        abuf.push_str(
-            "\x1b[K     ██████╗ ██╗   ██╗ ██████╗████████╗██╗   ██╗   ██╗   ██╗██╗███╗   ███╗\r\n",
-        );
-        abuf.push_str(
-            "\x1b[K     ██╔══██╗██║   ██║██╔════╝╚══██╔══╝╚██╗ ██╔╝   ██║   ██║██║████╗ ████║\r\n",
-        );
-        abuf.push_str(
-            "\x1b[K     ██████╔╝██║   ██║╚█████╗    ██║    ╚████╔╝    ╚██╗ ██╔╝██║██╔████╔██║\r\n",
-        );
-        abuf.push_str(
-            "\x1b[K     ██╔══██╗██║   ██║ ╚═══██╗   ██║     ╚██╔╝      ╚████╔╝ ██║██║╚██╔╝██║\r\n",
-        );
-        abuf.push_str(
-            "\x1b[K     ██║  ██║╚██████╔╝██████╔╝   ██║      ██║        ╚██╔╝  ██║██║ ╚═╝ ██║\r\n",
-        );
-        abuf.push_str(
-            "\x1b[K     ╚═╝  ╚═╝ ╚═════╝ ╚═════╝    ╚═╝      ╚═╝         ╚═╝   ╚═╝╚═╝     ╚═╝\r\n",
-        );
-        abuf.push_str("\r\n");
-        // abuf.push_str("]x1b[K                 Rusty-VIM               \r\n");
-        abuf.push_str(
-            "\x1b[K                Implementation of Vim-like text-editor in rust            \r\n",
-        );
-        abuf.push_str(
-            "\x1b[K                              version 0.1.0                               \r\n",
-        );
-
-        abuf.push_str(
-            "\x1b[K                             By Dijith Dinesh                             \r\n",
-        );
-        abuf.push_str("\r\n");
-        abuf.push_str(
-            "\x1b[K                   type  :q<Enter>       to exit                          \r\n",
-        );
-        abuf.push_str(
-            "\x1b[K                   type  i               to enter insert mode             \r\n",
-        );
+        let repeat = (self.size.y.saturating_sub(content.len() + 4)) / 3;
+        let space = "\r\n".repeat(repeat);
+        abuf.push_str(&space);
+        for i in 0..content.len() {
+            let repeat = (self.size.x.saturating_sub(content[i].chars().count())) / 2;
+            let space = " ".repeat(repeat);
+            abuf.push_str(&space);
+            abuf.push_str(content[i]);
+            abuf.push_str(&space);
+            abuf.push_str("\r\n");
+        }
     }
-    fn render_rows(&mut self, buffer: &TextBuffer, abuf: &mut String) {
+    fn render_rows(&mut self, buffer: &TextBuffer, abuf: &mut String, mode: EditorModes) {
         if self.is_start_first_time && buffer.rows.is_empty() {
             self.render_start_page(abuf);
             abuf.push_str("\x1b[999B");
             self.render_command_line(abuf);
             abuf.push_str("\r\x1b[A");
-            self.render_status_line(abuf, &buffer.pos, &buffer.filename);
+            self.render_status_line(abuf, &buffer.pos, &String::new(), mode);
             return;
         }
         self.is_start_first_time = false;
@@ -168,7 +155,8 @@ impl Terminal {
                 abuf.push_str("\x1b[48;2;46;52;64m");
                 abuf.push_str("\r");
                 abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits,));
-                abuf.push_str("\x1b[38;2;216;222;233m");
+                abuf.push_str("\x1b[38;2;129;161;193m");
+                // abuf.push_str("\x1b[38;2;216;222;233m");
                 if self.cursor.y + self.camera.y == y {
                     abuf.push_str("\x1b[48;2;76;86;106m");
                 } else {
@@ -183,28 +171,48 @@ impl Terminal {
                 abuf.push_str("~\r\n");
             }
         }
-        self.render_status_line(abuf, &buffer.pos, &buffer.filename);
+
+        let filename = &buffer.filename.as_ref().map_or("", |s| s.as_str());
+        self.render_status_line(abuf, &buffer.pos, filename, mode);
         abuf.push_str("\r\n");
         self.render_command_line(abuf);
         // abuf.push_str(&self.status_line_right);
     }
-    fn render_status_line(&self, abuf: &mut String, pos: &Position, filename: &String) {
+    fn get_mode_color(&self, mode: EditorModes) -> &str {
+        match mode {
+            EditorModes::Insert => "\r\x1b[48;2;163;190;140m",
+            EditorModes::Normal => "\r\x1b[48;2;129;161;193m",
+            EditorModes::Command => "\r\x1b[48;2;208;135;112m",
+        }
+    }
+    fn render_status_line(
+        &self,
+        abuf: &mut String,
+        pos: &Position,
+        filename: &str,
+        mode: EditorModes,
+    ) {
         abuf.push_str("\x1b[K"); //clears from current position to end of line
         let spaces = " ".repeat(self.size.x);
         abuf.push_str("\x1b[38;2;236;239;244m");
         abuf.push_str("\x1b[48;2;76;86;106m");
         abuf.push_str(&spaces);
         abuf.push_str("\r\x1b[38;2;46;52;64m");
-        abuf.push_str("\x1b[48;2;129;161;193m");
+        abuf.push_str(self.get_mode_color(mode));
         abuf.push_str(&self.status_line_left);
         abuf.push_str("\x1b[38;2;236;239;244m");
-        abuf.push_str("\x1b[48;2;76;86;106m");
+        abuf.push_str("\x1b[48;2;76;86;106m ");
         abuf.push_str(filename);
         abuf.push_str(&format!("\r\x1b[{}C", self.size.x - 8));
         let spaces = " ".repeat(8);
         abuf.push_str(&spaces);
-        abuf.push_str(&format!("\r\x1b[{}C", self.size.x - 7));
-        abuf.push_str(&format!("{}:{}", pos.y, pos.x));
+        abuf.push_str(self.get_mode_color(mode));
+        abuf.push_str("\r\x1b[38;2;46;52;64m");
+        abuf.push_str(&format!(
+            "\r\x1b[{}C",
+            self.size.x - (pos.y.to_string().len() + pos.x.to_string().len() + 3)
+        ));
+        abuf.push_str(&format!(" {}:{} ", pos.y, pos.x));
     }
     fn render_command_line(&self, abuf: &mut String) {
         abuf.push_str("\r");
@@ -237,8 +245,8 @@ impl Terminal {
                 .y
                 .saturating_sub(self.camera.y.saturating_sub(pos.y));
         }
-        let cursorcode = self.get_cursor_code();
         abuf.push_str("\x1b[?25l"); //hide cursor
+        let cursorcode = self.get_cursor_code();
         abuf.push_str("\x1b[H"); //cursor upperleft
         abuf.push_str(&format!("{}", cursorcode)); //cursor upperleft
     }
@@ -252,10 +260,10 @@ impl Terminal {
         abuf.push_str("\x1b[?25h");
     }
 
-    pub fn refresh_screen(&mut self, buffer: &TextBuffer) -> Result<()> {
+    pub fn refresh_screen(&mut self, buffer: &TextBuffer, mode: EditorModes) -> Result<()> {
         let mut abuf = String::new();
         self.render_cursor_position(&buffer.pos, &mut abuf);
-        self.render_rows(buffer, &mut abuf);
+        self.render_rows(buffer, &mut abuf, mode);
         self.update_mouse_pos(&mut abuf);
         write!(io::stdout(), "{}", abuf)?;
         stdout().flush()?;

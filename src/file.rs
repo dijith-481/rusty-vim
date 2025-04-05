@@ -21,12 +21,9 @@ where
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
 }
-pub fn write_file_to_disk(filename: &str, rows: &Vec<String>) -> Result<(), FileError> {
+pub fn write_file_to_disk(filename: &str, rows: &Vec<String>) -> Result<(), AppError> {
     let long_string = rows.join("\n");
-    if filename.is_empty() {
-        return Err(FileError::EmptyFileName);
-    }
-    let mut file = File::create(&filename).expect("err file");
-    file.write_all(long_string.as_bytes()).expect("err write");
+    let mut file = File::create(&filename)?;
+    file.write_all(long_string.as_bytes())?;
     Ok(())
 }
