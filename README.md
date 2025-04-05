@@ -6,8 +6,8 @@ A modal, Vim-like text editor built from scratch in **~1500 lines of Rust**, usi
 
 Rusty Vim started as a project to understand terminal applications (initially inspired by the Kilo editor tutorial) and evolved into implementing core Vim features and motions. It focuses on leveraging Rust's safety features while recreating the efficient, keyboard-centric editing experience.
 
-<img src="https://github.com/dijith-481/rusty-vim/blob/main/images/editing.png" width = "25%"><img src="https://github.com/dijith-481/rusty-vim/blob/main/images/rusty_vim.gif" width = "28%">
-<img src="https://github.com/dijith-481/rusty-vim/blob/main/images/start.png" width = "50%">
+<img src="https://github.com/dijith-481/rusty-vim/blob/main/images/editing.png" width = "47%"><img src="https://github.com/dijith-481/rusty-vim/blob/main/images/rusty_vim.gif" width = "53%">
+<img src="https://github.com/dijith-481/rusty-vim/blob/main/images/start.png" width = "100%">
 ## Features
 
 Rusty Vim implements some of Vim's core functionality
