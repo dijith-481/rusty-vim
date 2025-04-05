@@ -22,7 +22,7 @@ impl InsertAction {
             127 => InsertAction::Backspace,
             13 => InsertAction::Newline,
             9 => InsertAction::Chars(c),
-            c if c > 32 => InsertAction::Chars(c),
+            c if c >= 32 => InsertAction::Chars(c),
             _ => InsertAction::None,
         }
     }
