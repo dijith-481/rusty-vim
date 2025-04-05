@@ -56,6 +56,7 @@ impl Terminal {
         terminal.size = Self::get_window_size(&terminal)?;
         Ok(terminal)
     }
+
     fn enable_raw_mode(fd: i32) -> Result<()> {
         write!(io::stdout(), "\x1b[?1049h").expect("write");
         stdout().flush().expect("flush");
@@ -71,11 +72,13 @@ impl Terminal {
         tcsetattr(fd, TCSAFLUSH, &termios)?;
         Ok(())
     }
+
     fn get_window_size(&self) -> Result<Position> {
         write!(io::stdout(), "\x1b[999C\x1b[999B")?;
         stdout().flush()?;
         Self::get_cursor_pos()
     }
+
     fn get_cursor_pos() -> Result<Position> {
         let mut response = String::new();
         write!(io::stdout(), "\x1b[6n")?;
@@ -97,6 +100,7 @@ impl Terminal {
         let cols = parts[1].parse::<usize>()?;
         Ok(Position { x: cols, y: rows })
     }
+
     fn render_start_page(&self, abuf: &mut String) {
         let content = [
             "██████╗ ██╗   ██╗ ██████╗████████╗██╗   ██╗   ██╗   ██╗██╗███╗   ███╗",
@@ -106,9 +110,10 @@ impl Terminal {
             "██║  ██║╚██████╔╝██████╔╝   ██║      ██║        ╚██╔╝  ██║██║ ╚═╝ ██║",
             "╚═╝  ╚═╝ ╚═════╝ ╚═════╝    ╚═╝      ╚═╝         ╚═╝   ╚═╝╚═╝     ╚═╝",
             "",
-            "Implementation of Vim-like text-editor in rust",
             "version 0.1.0",
-            "By Dijith Dinesh",
+            " By Dijith Dinesh",
+            "github.com/dijith-481",
+            "Implementation of Vim-like text-editor in rust",
             "",
             "type  :q<Enter>       to exit             ",
             "type  i               to enter insert mode",
@@ -129,6 +134,7 @@ impl Terminal {
             abuf.push_str("\r\n");
         }
     }
+
     fn render_rows(&mut self, buffer: &TextBuffer, abuf: &mut String, mode: EditorModes) {
         if self.is_start_first_time && buffer.rows.is_empty() {
             self.render_start_page(abuf);
@@ -155,7 +161,6 @@ impl Terminal {
                 abuf.push_str("\x1b[48;2;46;52;64m");
                 abuf.push_str("\r");
                 abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits,));
-                // abuf.push_str("\x1b[38;2;129;161;193m");
                 abuf.push_str("\x1b[38;2;216;222;233m");
                 if self.cursor.y + self.camera.y == y {
                     abuf.push_str("\x1b[48;2;76;86;106m");
@@ -177,6 +182,7 @@ impl Terminal {
         abuf.push_str("\r\n");
         self.render_command_line(abuf);
     }
+
     fn get_mode_color(&self, mode: EditorModes) -> &str {
         match mode {
             EditorModes::Insert => "\r\x1b[48;2;163;190;140m",
@@ -184,6 +190,7 @@ impl Terminal {
             EditorModes::Command => "\r\x1b[48;2;208;135;112m",
         }
     }
+
     fn render_status_line(
         &self,
         abuf: &mut String,
@@ -213,6 +220,7 @@ impl Terminal {
         ));
         abuf.push_str(&format!(" {}:{} ", pos.y, pos.x));
     }
+
     fn render_command_line(&self, abuf: &mut String) {
         abuf.push_str("\r");
 
@@ -227,6 +235,7 @@ impl Terminal {
         ));
         abuf.push_str(&self.status_line_right);
     }
+
     fn render_cursor_position(&mut self, pos: &Position, abuf: &mut String) {
         let bottom_ui_size = 2;
         let left_ui_size = self.line_no_digits + 2;
@@ -298,15 +307,7 @@ impl Terminal {
         }
         Ok(key)
     }
-    pub fn middle_screen_pos(&self) -> usize {
-        self.cursor.y + self.size.y / 2 - 1
-    }
-    // pub fn top_screen_pos(&self) -> usize {
-    //     self.cursor.y
-    // }
-    pub fn bottom_screen_pos(&self) -> usize {
-        self.cursor.y + self.size.y - 2
-    }
+
     fn get_cursor_code(&self) -> &str {
         match self.cursor_type {
             CursorType::Block => "\x1b[2 q",
@@ -321,6 +322,7 @@ impl Terminal {
             _ => self.cursor_type = CursorType::Block,
         }
     }
+
     fn get_line_no_padding(buffer_len: usize) -> usize {
         buffer_len.checked_ilog10().unwrap_or_else(|| 0) as usize + 1
     }
@@ -328,7 +330,7 @@ impl Terminal {
 impl Drop for Terminal {
     fn drop(&mut self) {
         tcsetattr(io::stdin().as_raw_fd(), TCSAFLUSH, &self.termios).expect("tcsetattr");
-        // write!(io::stdout(), "\x1b[?1049l").expect("write");
+        write!(io::stdout(), "\x1b[?1049l").expect("write");
         stdout().flush().expect("flush");
     }
 }

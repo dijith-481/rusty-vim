@@ -27,13 +27,15 @@ impl CommandMode {
             value: None,
         }
     }
+
     pub fn handle_file_write_result(&mut self, result: Result<String, FileError>) {
+        self.escape("");
         match result {
             Ok(filename) => self.command_string = String::from(format!("saved file {}", filename)),
             Err(e) => self.handle_file_error(e),
         }
-        self.escape();
     }
+
     fn handle_file_error(&mut self, e: FileError) {
         match e {
             FileError::EmptyFileName => self.command_string = String::from("Empty file name"),
@@ -43,13 +45,12 @@ impl CommandMode {
             }
         }
     }
+
     pub fn handle_key(&mut self, c: u8) -> CommandReturn {
         if c == b'\x1b' {
-            self.command_string = String::new();
             return CommandReturn::Escape;
         }
         if c == b':' {
-            self.command_string = String::new();
             return CommandReturn::None;
         }
         if c == 13 {
@@ -79,6 +80,7 @@ impl CommandMode {
         }
         CommandReturn::None
     }
+
     fn buffer_command(&mut self) -> CommandReturn {
         let val = self.command.split_off(1);
         if let Ok(num) = val.as_str().parse::<usize>() {
@@ -90,9 +92,12 @@ impl CommandMode {
             _ => CommandReturn::Escape,
         }
     }
-    pub fn escape(&mut self) {
+
+    pub fn escape(&mut self, err: &str) {
         self.command.clear();
+        self.command_string = String::from(err);
     }
+
     fn execute(&mut self) -> CommandReturn {
         if self.command.starts_with("b") {
             return self.buffer_command();

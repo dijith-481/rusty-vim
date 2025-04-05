@@ -1,4 +1,4 @@
-use crate::error::{AppError, FileError};
+use crate::error::AppError;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Lines, Write},

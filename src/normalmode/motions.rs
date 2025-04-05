@@ -1,5 +1,4 @@
 use crate::editor::EditorModes;
-
 use crate::insertmode::InsertType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,7 +11,6 @@ pub enum Motion {
     EndOfFile,
     GoToLine(usize),
     BackSpace(usize),
-    GoToX(usize),
     StartOfLine,
     StartOfNonWhiteSpace,
     Word(usize),
@@ -25,18 +23,4 @@ pub enum BufferAction {
     ChangeMode(EditorModes, InsertType),
     None,
     Move(Motion),
-}
-// pub enum Motion {
-//     BufferMotion,
-//     PageTop,
-//     PageMiddle,
-//     PageBottom,
-// }
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NormalAction {
-    Move(Motion),
-    ChangeMode(EditorModes),
-    NewLine,
-    Delete,
-    Unknown,
 }

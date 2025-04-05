@@ -578,7 +578,6 @@ impl TextBuffer {
             Motion::StartOfLine => self.move_to_start_of_line(),
             Motion::EndOfLine(repeat) => self.move_to_end_of_line(repeat),
             Motion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
-            Motion::GoToX(pos) => self.move_to_x(pos),
             Motion::GoToLine(line) => self.move_to_line(line),
             Motion::EndOfFile => self.move_to_line(self.end_of_file()),
         }
