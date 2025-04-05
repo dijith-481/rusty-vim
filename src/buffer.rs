@@ -360,6 +360,7 @@ impl TextBuffer {
 
     fn move_to_line(&mut self, line: usize) {
         self.set_y_or(self.end_of_file(), line);
+        self.set_x_or(self.end_of_line(), self.pos.x);
     }
 
     fn move_to_x(&mut self, x: usize) {
