@@ -2,9 +2,9 @@
 
 [![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 
-A modal, Vim-like text editor built from scratch in **~1500 lines of Rust**, using only the termios crate for terminal interaction.
+A modal, Vim-like text editor built from scratch in **~1500 lines of Rust** with `Nord` Color Scheme.
 
-Rusty Vim started as a project to understand terminal applications (initially inspired by the Kilo editor tutorial) and evolved into implementing core Vim features and motions. It focuses on leveraging Rust's safety features while recreating the efficient, keyboard-centric editing experience.
+Rusty Vim started as a project to understand terminal applications (initially inspired by the Kilo editor tutorial) and evolved into implementing core Vim features and motions. It focuses on leveraging Rust's safety features while recreating the efficient, keyboard-centric editing experience.using only the termios crate for terminal interaction.
 
 <img src="https://github.com/dijith-481/rusty-vim/blob/main/images/editing.png" width = "47%"><img src="https://github.com/dijith-481/rusty-vim/blob/main/images/rusty_vim.gif" width = "53%">
 <img src="https://github.com/dijith-481/rusty-vim/blob/main/images/start.png" width = "100%">
