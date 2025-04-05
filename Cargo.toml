@@ -1,5 +1,5 @@
 [package]
-name = "rust-text-editor"
+name = "rusty-vim"
 version = "0.1.0"
 edition = "2024"
 

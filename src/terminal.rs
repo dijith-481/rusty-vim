@@ -128,7 +128,7 @@ impl Terminal {
             "\x1b[K                Implementation of Vim-like text-editor in rust            \r\n",
         );
         abuf.push_str(
-            "\x1b[K                              version 0.0.1                               \r\n",
+            "\x1b[K                              version 0.1.0                               \r\n",
         );
 
         abuf.push_str(
