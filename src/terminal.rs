@@ -155,8 +155,8 @@ impl Terminal {
                 abuf.push_str("\x1b[48;2;46;52;64m");
                 abuf.push_str("\r");
                 abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits,));
-                abuf.push_str("\x1b[38;2;129;161;193m");
-                // abuf.push_str("\x1b[38;2;216;222;233m");
+                // abuf.push_str("\x1b[38;2;129;161;193m");
+                abuf.push_str("\x1b[38;2;216;222;233m");
                 if self.cursor.y + self.camera.y == y {
                     abuf.push_str("\x1b[48;2;76;86;106m");
                 } else {
@@ -176,7 +176,6 @@ impl Terminal {
         self.render_status_line(abuf, &buffer.pos, filename, mode);
         abuf.push_str("\r\n");
         self.render_command_line(abuf);
-        // abuf.push_str(&self.status_line_right);
     }
     fn get_mode_color(&self, mode: EditorModes) -> &str {
         match mode {

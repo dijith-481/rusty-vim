@@ -219,7 +219,7 @@ impl TextBuffer {
     }
     fn delete_to_end_of_line(&mut self, repeat: usize) {
         self.delete_str(self.pos.x, self.end_of_line() + 1);
-        self.move_left(1);
+        // self.move_left(1);
         if self.is_rows_full(self.pos.y) {
             return;
         }
@@ -231,6 +231,14 @@ impl TextBuffer {
     fn move_to_first_non_white_space(&mut self) {
         self.move_to_x(self.first_non_white_space());
         self.x_end = self.pos.x
+    }
+    fn delete_to_first_non_white_space(&mut self) {
+        if self.pos.x > self.first_non_white_space() {
+            self.delete_str(self.first_non_white_space(), self.pos.x + 1);
+        } else {
+            self.delete_str(self.pos.x, self.first_non_white_space());
+        }
+        self.pos.x = self.first_non_white_space();
     }
     fn move_left(&mut self, repeat: usize) {
         self.pos.x = self.pos.x.saturating_sub(repeat);
@@ -592,7 +600,7 @@ impl TextBuffer {
             Motion::ParagraphEnd(repeat) => self.move_next_paragraph(repeat),
             Motion::StartOfLine => self.move_to_start_of_line(),
             Motion::EndOfLine(repeat) => self.delete_to_end_of_line(repeat),
-            Motion::StartOfNonWhiteSpace => self.move_to_first_non_white_space(),
+            Motion::StartOfNonWhiteSpace => self.delete_to_first_non_white_space(),
             // BufferMotion::GoToX(pos) => self.move_to_x(pos),
             // BufferMotion::GoToLine(line) => self.delete_lines(line),
             Motion::EndOfFile => self.delete_lines(self.pos.y, self.end_of_file() + 1),
