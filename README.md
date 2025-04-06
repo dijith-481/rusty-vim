@@ -8,6 +8,7 @@ Rusty Vim started as a project to understand terminal applications (initially in
 
 <img src="https://github.com/dijith-481/rusty-vim/blob/main/images/editing.png" width = "47%"><img src="https://github.com/dijith-481/rusty-vim/blob/main/images/rusty_vim.gif" width = "53%">
 <img src="https://github.com/dijith-481/rusty-vim/blob/main/images/start.png" width = "100%">
+
 ## Features
 
 Rusty Vim implements some of Vim's core functionality
@@ -41,9 +42,9 @@ Rusty Vim implements some of Vim's core functionality
     - `dd` (delete current line).
     - `dw` (delete word).
     - `d$` (delete to end of line).
+    - `d0` (delete to start of line).
     - `d^` (delete to first non-whitespace).
     - `dG` (delete to end of file).
-    - `dgg` (delete to start of file).
     - `dh`, `dj`, `dk`, `dl` (delete based on direction).
   - _Repeat counts work with deletions (e.g., `d5w`, `2dd`)._
 

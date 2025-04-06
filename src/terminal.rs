@@ -218,7 +218,7 @@ impl Terminal {
             "\r\x1b[{}C",
             self.size.x - (pos.y.to_string().len() + pos.x.to_string().len() + 3)
         ));
-        abuf.push_str(&format!(" {}:{} ", pos.y, pos.x));
+        abuf.push_str(&format!(" {}:{} ", pos.y + 1, pos.x + 1));
     }
 
     fn render_command_line(&self, abuf: &mut String) {

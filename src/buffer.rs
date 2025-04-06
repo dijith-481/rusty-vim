@@ -214,8 +214,11 @@ impl TextBuffer {
     }
 
     fn delete_lines(&mut self, start: usize, mut end: usize) {
-        if end > self.end_of_file() + 1 {
-            end = self.end_of_file() + 1;
+        if self.rows.is_empty() {
+            return;
+        }
+        if end > self.rows.len() {
+            end = self.rows.len();
         }
         self.rows.drain(start..end);
         self.set_y_or(self.end_of_file(), self.pos.y);
@@ -318,6 +321,9 @@ impl TextBuffer {
     }
 
     fn delete_right(&mut self, repeat: usize) {
+        if self.rows.is_empty() {
+            return;
+        }
         let mut new_x = self.pos.x + repeat;
         if new_x > self.end_of_line() + 1 {
             new_x = self.end_of_line() + 1;

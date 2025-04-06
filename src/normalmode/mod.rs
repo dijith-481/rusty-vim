@@ -41,6 +41,7 @@ impl NormalMode {
                     'd' => BufferAction::Delete(Motion::Down(repeat.saturating_sub(1))),
                     'h' => BufferAction::Delete(Motion::Left(repeat)),
                     'l' => BufferAction::Delete(Motion::Right(repeat)),
+                    '0' => BufferAction::Delete(Motion::StartOfLine),
                     '$' => BufferAction::Delete(Motion::EndOfLine(repeat)),
                     'G' => BufferAction::Delete(Motion::EndOfFile),
                     'w' => BufferAction::Delete(Motion::Word(repeat)),
