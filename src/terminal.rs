@@ -216,7 +216,7 @@ impl Terminal {
         abuf.push_str("\r\x1b[38;2;46;52;64m");
         abuf.push_str(&format!(
             "\r\x1b[{}C",
-            self.size.x - (pos.y.to_string().len() + pos.x.to_string().len() + 3)
+            self.size.x - ((pos.y + 1).to_string().len() + (pos.x + 1).to_string().len() + 3)
         ));
         abuf.push_str(&format!(" {}:{} ", pos.y + 1, pos.x + 1));
     }
