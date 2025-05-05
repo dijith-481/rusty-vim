@@ -1,5 +1,7 @@
-use crate::error::FileError;
+use std::cmp::Ordering;
 
+use crate::error::FileError;
+#[derive(Default)]
 pub struct CommandMode {
     pub command_string: String,
     command: String,
@@ -18,6 +20,7 @@ pub enum CommandReturn {
     ForceSave(Option<String>),
     None,
 }
+
 impl CommandMode {
     pub fn new() -> Self {
         let command = String::new();
@@ -31,7 +34,7 @@ impl CommandMode {
     pub fn handle_file_write_result(&mut self, result: Result<String, FileError>) {
         self.escape("");
         match result {
-            Ok(filename) => self.command_string = String::from(format!("saved file {}", filename)),
+            Ok(filename) => self.command_string = format!("saved file {}", filename),
             Err(e) => self.handle_file_error(e),
         }
     }
@@ -59,7 +62,7 @@ impl CommandMode {
             } else {
                 let mut words = self.command_string.split_whitespace();
                 words.next();
-                self.value = words.next().map_or(None, |s| Some(s.to_string()));
+                self.value = words.next().map(|s| s.to_string());
             }
             return self.execute();
         }
@@ -70,14 +73,19 @@ impl CommandMode {
             }
             return CommandReturn::None;
         }
-        if c == 32 {
-            if self.command.is_empty() {
-                self.command = self.command_string.clone();
+        match c.cmp(&(32)) {
+            Ordering::Equal => {
+                if self.command.is_empty() {
+                    self.command = self.command_string.clone();
+                    self.command_string.push(c as char);
+                }
+            }
+            Ordering::Greater => {
                 self.command_string.push(c as char);
             }
-        } else if c > 32 {
-            self.command_string.push(c as char);
+            Ordering::Less => (),
         }
+
         CommandReturn::None
     }
 

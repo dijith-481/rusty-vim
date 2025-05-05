@@ -16,6 +16,7 @@ pub enum Motion {
     Word(usize),
     ParagraphEnd(usize),
     ParagraphStart(usize),
+    #[allow(clippy::upper_case_acronyms)]
     WORD(usize),
 }
 pub enum BufferAction {

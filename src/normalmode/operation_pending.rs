@@ -60,7 +60,6 @@ impl PendingOperations {
             self.modifier = key;
         } else if !self.is_motion_given() && self.valid_motions.contains(&key) {
             self.motion = key;
-        } else {
         }
     }
 }

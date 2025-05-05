@@ -85,7 +85,7 @@ impl Terminal {
         stdout().flush()?;
         let mut buf = [0; 1];
         loop {
-            io::stdin().read(&mut buf)?;
+            io::stdin().read_exact(&mut buf)?;
             let c = buf[0] as char;
             if c == 'R' {
                 break;
@@ -125,11 +125,11 @@ impl Terminal {
         let repeat = (self.size.y.saturating_sub(content.len() + 4)) / 3;
         let space = "\r\n".repeat(repeat);
         abuf.push_str(&space);
-        for i in 0..content.len() {
-            let repeat = (self.size.x.saturating_sub(content[i].chars().count())) / 2;
+        for line in &content {
+            let repeat = (self.size.x.saturating_sub(line.chars().count())) / 2;
             let space = " ".repeat(repeat);
             abuf.push_str(&space);
-            abuf.push_str(content[i]);
+            abuf.push_str(line);
             abuf.push_str(&space);
             abuf.push_str("\r\n");
         }
@@ -141,7 +141,7 @@ impl Terminal {
             abuf.push_str("\x1b[999B");
             self.render_command_line(abuf);
             abuf.push_str("\r\x1b[A");
-            self.render_status_line(abuf, &buffer.pos, &String::new(), mode);
+            self.render_status_line(abuf, &buffer.pos, "", mode);
             return;
         }
         self.is_start_first_time = false;
@@ -149,7 +149,7 @@ impl Terminal {
 
         let camera_y_end = self.camera.y + self.size.y - 2;
         for y in self.camera.y..camera_y_end {
-            if let Some(line) = buffer.rows.get(y as usize) {
+            if let Some(line) = buffer.rows.get(y) {
                 if self.cursor.y + self.camera.y == y {
                     abuf.push_str("\x1b[48;2;76;86;106m");
                     abuf.push_str("\x1b[38;2;129;161;193m");
@@ -159,7 +159,7 @@ impl Terminal {
                 }
                 abuf.push_str("\x1b[K"); //clears from current position to end of line
                 abuf.push_str("\x1b[48;2;46;52;64m");
-                abuf.push_str("\r");
+                abuf.push('\r');
                 abuf.push_str(&format!("{:>1$} |", y + 1, self.line_no_digits,));
                 abuf.push_str("\x1b[38;2;216;222;233m");
                 if self.cursor.y + self.camera.y == y {
@@ -222,8 +222,7 @@ impl Terminal {
     }
 
     fn render_command_line(&self, abuf: &mut String) {
-        abuf.push_str("\r");
-
+        abuf.push('\r');
         abuf.push_str("\x1b[48;2;46;52;64m");
         abuf.push_str("\x1b[38;2;216;222;233m");
         abuf.push_str("\x1b[K"); //clears from current position to end of line
@@ -256,7 +255,7 @@ impl Terminal {
         abuf.push_str("\x1b[?25l"); //hide cursor
         let cursorcode = self.get_cursor_code();
         abuf.push_str("\x1b[H"); //cursor upperleft
-        abuf.push_str(&format!("{}", cursorcode)); //cursor upperleft
+        abuf.push_str(cursorcode); //cursor upperleft
     }
 
     fn update_mouse_pos(&self, abuf: &mut String) {
@@ -279,33 +278,30 @@ impl Terminal {
     }
 
     pub fn read_key(&self) -> Result<u8> {
-        let mut buffer = [0; 1];
-        io::stdin().read(&mut buffer)?;
-        let key;
-        if buffer[0] == b'\x1b' {
-            key = self.handle_other_keys()?;
-        } else {
-            key = buffer[0];
+        let mut buffer = [0; 4];
+        let bytes_read = io::stdin().read(&mut buffer)?;
+        if bytes_read == 0 {
+            return Ok(0);
         }
-        Ok(key)
+        Ok(if buffer[0] == b'\x1b' {
+            self.handle_other_keys(&buffer)
+        } else {
+            buffer[0]
+        })
     }
 
-    fn handle_other_keys(&self) -> Result<u8> {
-        let mut seq = [0; 3];
-        io::stdin().read(&mut seq)?;
-        let key: u8;
-        if seq[0] == b'[' {
-            match seq[1] as char {
-                'A' => key = b'k',
-                'B' => key = b'j',
-                'C' => key = b'l',
-                'D' => key = b'h',
-                _ => key = b'\x1b',
+    fn handle_other_keys(&self, seq: &[u8]) -> u8 {
+        if seq[1] == b'[' {
+            match seq[2] as char {
+                'A' => b'k',
+                'B' => b'j',
+                'C' => b'l',
+                'D' => b'h',
+                _ => b'\x1b',
             }
         } else {
-            key = b'\x1b';
+            b'\x1b'
         }
-        Ok(key)
     }
 
     fn get_cursor_code(&self) -> &str {
@@ -324,7 +320,7 @@ impl Terminal {
     }
 
     fn get_line_no_padding(buffer_len: usize) -> usize {
-        buffer_len.checked_ilog10().unwrap_or_else(|| 0) as usize + 1
+        buffer_len.checked_ilog10().unwrap_or(0) as usize + 1
     }
 }
 impl Drop for Terminal {

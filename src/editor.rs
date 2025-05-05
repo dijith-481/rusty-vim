@@ -7,6 +7,7 @@ use crate::normalmode::NormalMode;
 use crate::normalmode::motions::BufferAction;
 use crate::normalmode::motions::Motion;
 use crate::terminal::Terminal;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -51,7 +52,7 @@ impl Editor {
     pub fn run(&mut self) -> Result<()> {
         loop {
             self.process_keypress()?;
-            if self.buff_vec.len() == 0 {
+            if self.buff_vec.is_empty() {
                 return Ok(());
             }
             self.render_ui()?;
@@ -62,8 +63,7 @@ impl Editor {
         if self.buff_vec.len() <= self.current_buff_index {
             self.current_buff_index = self.buff_vec.len().saturating_sub(1);
         }
-        let curr_buff_key = self.buff_vec.get(self.current_buff_index).unwrap().clone();
-        curr_buff_key
+        *self.buff_vec.get(self.current_buff_index).unwrap()
     }
 
     fn render_ui(&mut self) -> Result<()> {
@@ -76,31 +76,28 @@ impl Editor {
     }
 
     fn process_normal_mode(&mut self, c: u8) {
-        match self.normal_mode.handle_keypress(c) {
-            Ok(action) => {
-                let val = if self.normal_mode.pending_operations.repeat != 0 {
-                    &self.normal_mode.pending_operations.repeat.to_string()
-                } else {
-                    ""
-                };
-                self.terminal.status_line_right = String::from(format!(
-                    "{}{}{}",
-                    val,
-                    self.normal_mode.pending_operations.action,
-                    self.normal_mode.pending_operations.motion
-                ));
-                let curr_buff_key = self.get_buff_key();
-                if let Some(buffer) = self.buffers.get_mut(&curr_buff_key) {
-                    match action {
-                        BufferAction::Delete(direction) => buffer.delete(direction),
-                        BufferAction::Move(direction) => buffer.motion(direction),
-                        BufferAction::ChangeMode(mode, pos) => self.change_mode(mode, pos),
-                        BufferAction::None => (),
-                    }
+        if let Ok(action) = self.normal_mode.handle_keypress(c) {
+            let val = if self.normal_mode.pending_operations.repeat != 0 {
+                &self.normal_mode.pending_operations.repeat.to_string()
+            } else {
+                ""
+            };
+            self.terminal.status_line_right = format!(
+                "{}{}{}",
+                val,
+                self.normal_mode.pending_operations.action,
+                self.normal_mode.pending_operations.motion
+            );
+            let curr_buff_key = self.get_buff_key();
+            if let Some(buffer) = self.buffers.get_mut(&curr_buff_key) {
+                match action {
+                    BufferAction::Delete(direction) => buffer.delete(direction),
+                    BufferAction::Move(direction) => buffer.motion(direction),
+                    BufferAction::ChangeMode(mode, pos) => self.change_mode(mode, pos),
+                    BufferAction::None => (),
                 }
-                self.normal_mode.pending_operations.reset();
             }
-            Err(_) => (),
+            self.normal_mode.pending_operations.reset();
         }
     }
 
@@ -166,17 +163,13 @@ impl Editor {
                 }
                 CommandReturn::ForceSaveQuit(filename) => {
                     let result = buffer.write_buffer_file(true, filename);
-                    if let Ok(_) = &result {
-                        should_quit = true;
-                    }
+                    should_quit = result.is_ok();
                     self.command_mode.handle_file_write_result(result);
                     self.mode = EditorModes::Normal;
                 }
                 CommandReturn::SaveQuit(filename) => {
                     let result = buffer.write_buffer_file(false, filename);
-                    if let Ok(_) = &result {
-                        should_quit = true;
-                    }
+                    should_quit = result.is_ok();
                     self.mode = EditorModes::Normal;
                     self.command_mode.handle_file_write_result(result);
                 }
@@ -215,18 +208,22 @@ impl Editor {
     }
 
     fn buf_n(&mut self, n: usize) {
-        if n == self.buff_vec.len() {
-            let buffer = TextBuffer::new(None).unwrap();
-            let key = self.buff_vec.last().unwrap() + 1;
-            self.buff_vec.push(key);
-            self.buffers.insert(key, buffer);
-            self.current_buff_index = n;
-            self.command_mode.escape("");
-        } else if self.buff_vec.len() > n {
-            self.current_buff_index = n;
-            self.command_mode.escape("");
-        } else {
-            self.command_mode.escape("Buffer not found");
+        match n.cmp(&self.buff_vec.len()) {
+            Ordering::Equal => {
+                let buffer = TextBuffer::new(None).unwrap();
+                let key = self.buff_vec.last().unwrap() + 1;
+                self.buff_vec.push(key);
+                self.buffers.insert(key, buffer);
+                self.current_buff_index = n;
+                self.command_mode.escape("");
+            }
+            Ordering::Less => {
+                self.current_buff_index = n;
+                self.command_mode.escape("");
+            }
+            Ordering::Greater => {
+                self.command_mode.escape("Buffer not found");
+            }
         }
         self.mode = EditorModes::Normal;
     }

@@ -21,9 +21,9 @@ where
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
 }
-pub fn write_file_to_disk(filename: &str, rows: &Vec<String>) -> Result<(), AppError> {
+pub fn write_file_to_disk(filename: &str, rows: &[String]) -> Result<(), AppError> {
     let long_string = rows.join("\n");
-    let mut file = File::create(&filename)?;
+    let mut file = File::create(filename)?;
     file.write_all(long_string.as_bytes())?;
     Ok(())
 }

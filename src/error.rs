@@ -9,6 +9,7 @@ pub enum AppError {
     Io(io::Error),
     FileWriteError,
     ParseIntError(num::ParseIntError),
+    EndOfInput,
 }
 #[derive(Debug)]
 pub enum FileError {
@@ -32,7 +33,8 @@ impl fmt::Display for AppError {
             AppError::TermError => write!(f, "Terminal error"),
             AppError::BufferError(e) => write!(f, "Error opening buffer {}", e),
             AppError::Io(e) => write!(f, "I/O error: {}", e),
-            AppError::ParseIntError(e) => write!(f, "I/O error: {}", e),
+            AppError::EndOfInput => write!(f, "EndOFInputError"),
+            AppError::ParseIntError(e) => write!(f, "ParseInt error {}", e),
             AppError::FileWriteError => write!(f, "File write error: ",),
         }
     }

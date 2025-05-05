@@ -9,7 +9,6 @@ use std::{
     collections::HashMap,
     fs,
     time::{Duration, SystemTime, UNIX_EPOCH},
-    usize,
 };
 
 pub struct TextBuffer {
@@ -86,9 +85,8 @@ impl TextBuffer {
 
     fn create_file_buffer(filename: String) -> Result<TextBuffer, AppError> {
         let modified_time = Self::get_modified_time(&filename);
-        let rows: Vec<String>;
         let pos = Position::new();
-        rows = load_file(&filename)?;
+        let rows = load_file(&filename)?;
         Ok(Self {
             is_changed: false,
             modified_time,
@@ -328,7 +326,7 @@ impl TextBuffer {
         if new_x > self.end_of_line() + 1 {
             new_x = self.end_of_line() + 1;
         }
-        if self.get_current_line().unwrap().len() == 0 {
+        if self.get_current_line().unwrap().is_empty() {
             return;
         }
 
@@ -392,7 +390,7 @@ impl TextBuffer {
             .iter()
             .skip(self.pos.y + 1)
             .enumerate()
-            .find(|(_, s)| s.len() == 0)
+            .find(|(_, s)| s.is_empty())
             .map_or(self.rows.len().saturating_sub(1), |(idx, _)| {
                 self.pos.y + 1 + idx
             })
@@ -404,7 +402,7 @@ impl TextBuffer {
             .take(self.pos.y)
             .enumerate()
             .rev()
-            .find(|(_, s)| s.len() == 0)
+            .find(|(_, s)| s.is_empty())
             .map_or(0, |(idx, _)| idx)
     }
 
@@ -471,7 +469,6 @@ impl TextBuffer {
                 .push_str(addingline.as_str());
             self.delete_lines(start_line + 1, start_line + 2);
         }
-        return;
     }
 
     fn move_next_word(&mut self, repeat: usize) {
@@ -523,11 +520,7 @@ impl TextBuffer {
             None => return 0,
         };
         let mut initial_type = self.find_char_class(initial_char);
-        for (i, c) in curr_line
-            .char_indices()
-            .skip(self.pos.x)
-            .map(|(i, c)| (i, c))
-        {
+        for (i, c) in curr_line.char_indices().skip(self.pos.x) {
             let char_type = self.find_char_class(c);
             if char_type != initial_type {
                 if char_type == CharClass::WhiteSpace {
@@ -549,11 +542,7 @@ impl TextBuffer {
             return curr_line.len();
         }
         let mut flag = false;
-        for (i, c) in curr_line
-            .char_indices()
-            .skip(self.pos.x)
-            .map(|(i, c)| (i, c))
-        {
+        for (i, c) in curr_line.char_indices().skip(self.pos.x) {
             if c.is_whitespace() {
                 flag = true;
             } else if flag {
@@ -604,8 +593,7 @@ impl TextBuffer {
     fn insert_prev_line(&mut self) {
         if self.rows.len() > self.pos.y {
             let first_char = self.first_non_white_space();
-            self.rows
-                .insert(self.pos.y, String::from(" ".repeat(first_char)));
+            self.rows.insert(self.pos.y, " ".repeat(first_char));
             self.pos.x = first_char;
         }
     }
@@ -614,8 +602,7 @@ impl TextBuffer {
         if self.rows.len() > self.pos.y {
             let first_char = self.first_non_white_space();
             self.pos.y += 1;
-            self.rows
-                .insert(self.pos.y, String::from(" ".repeat(first_char)));
+            self.rows.insert(self.pos.y, " ".repeat(first_char));
             self.pos.x = first_char;
         }
         if self.rows.is_empty() {
@@ -668,13 +655,13 @@ impl TextBuffer {
         filename: Option<String>,
     ) -> Result<String, FileError> {
         if let Some(name) = filename {
-            write_file_to_disk(&name, &self.rows).map_err(|e| FileError::OtherError(e))?;
+            write_file_to_disk(&name, &self.rows).map_err(FileError::OtherError)?;
             self.modified_time = Self::get_modified_time(&name);
             self.is_changed = false;
             if self.filename.is_none() {
                 self.filename = Some(name.clone())
             }
-            return Ok(name);
+            Ok(name)
         } else if let Some(name) = self.filename.clone() {
             if !force {
                 let modified_time = Self::get_modified_time(&name);
@@ -682,7 +669,7 @@ impl TextBuffer {
                     return Err(FileError::FileChanged);
                 }
             };
-            write_file_to_disk(&name, &self.rows).map_err(|e| FileError::OtherError(e))?;
+            write_file_to_disk(&name, &self.rows).map_err(FileError::OtherError)?;
             self.modified_time = Self::get_modified_time(&name);
             self.is_changed = false;
             return Ok(name);
